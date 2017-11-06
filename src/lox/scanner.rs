@@ -77,7 +77,7 @@ impl <'a, 'b> ScannerState<'a, 'b> {
                         self.advance();
                     }
                 } else {
-                    self.add_token(Slash)
+                    self.add_token(Slash);
                 }
             },
             b' ' | b'\t' | b'\r' => { },
@@ -87,9 +87,9 @@ impl <'a, 'b> ScannerState<'a, 'b> {
                 if c.is_ascii_digit() {
                     self.number();
                 } else if c.is_ascii_alphabetic() {
-                    self.identifier()
+                    self.identifier();
                 } else {
-                    self.lox.error(self.line, "Unknown token.");
+                    self.lox.error_on_line(self.line, "Unknown token.");
                 }
             }
         }
@@ -105,7 +105,7 @@ impl <'a, 'b> ScannerState<'a, 'b> {
         }
 
         if self.is_at_end() {
-            self.lox.error(self.line, "Unterminated string.");
+            self.lox.error_on_line(self.line, "Unterminated string.");
             return;
         }
 
@@ -115,7 +115,7 @@ impl <'a, 'b> ScannerState<'a, 'b> {
         let value = match str::from_utf8(&self.source[self.start + 1 .. self.current - 1]) {
             Ok(s) => s.to_owned(),
             Err(e) => {
-                self.lox.error(self.line, &format!("String literal is not a valid UTF8. {}", e.description()));
+                self.lox.error_on_line(self.line, &format!("String literal is not a valid UTF8. {}", e.description()));
                 return;
             }
         };
@@ -142,7 +142,7 @@ impl <'a, 'b> ScannerState<'a, 'b> {
             .unwrap()
             .parse()
             .unwrap();
-        self.add_token(Number(num))
+        self.add_token(Number(num));
     }
 
     fn identifier(&mut self) {

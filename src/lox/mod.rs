@@ -5,6 +5,11 @@ use std::process::exit;
 
 mod token;
 mod scanner;
+mod ast;
+mod parser;
+
+use self::token::{Token, TokenContext};
+use self::ast::Expr;
 
 pub struct Lox {
     had_errors: bool,
@@ -22,7 +27,7 @@ impl Lox {
         let mut file = File::open(path).expect("Could not open source file");
         let mut contents = Vec::new();
         file.read_to_end(&mut contents).expect("Could not read source file content");
-        self.run(&contents[..]);
+        self.run(&contents);
 
         if self.had_errors {
             exit(65);
@@ -45,13 +50,20 @@ impl Lox {
 
     pub fn run(&mut self, source: &[u8]) {
         let tokens = scanner::scan_tokens(source, self);
-        for token in tokens {
-            println!("{}", token);
+        let expression = parser::parse(tokens, self);
+
+        if self.had_errors {
+            return;
         }
+
+        println!("{}", ast::printer::print_ast(&expression));
     }
 
-    pub fn error(&mut self, line: u32, msg: &str) {
+    pub fn error_on_line(&mut self, line: u32, msg: &str) {
         self.report(line, "", msg);
+    }
+    pub fn error_at_token(&mut self, token: &TokenContext, msg: &str) {
+        self.report(token.line, &format!("at '{}'", token.token), msg);
     }
 
     fn report(&mut self, line: u32, place: &str, msg: &str) {
