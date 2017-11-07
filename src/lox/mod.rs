@@ -7,19 +7,20 @@ mod token;
 mod scanner;
 mod ast;
 mod parser;
+mod interpreter;
 
-use self::token::{Token, TokenContext};
-use self::ast::Expr;
+use self::token::TokenContext;
 
 pub struct Lox {
     had_errors: bool,
-
+    had_runtime_errors: bool,
 }
 
 impl Lox {
     pub fn new() -> Lox {
         Lox {
             had_errors: false,
+            had_runtime_errors: false,
         }
     }
 
@@ -31,6 +32,9 @@ impl Lox {
 
         if self.had_errors {
             exit(65);
+        }
+        if self.had_runtime_errors {
+            exit(70);
         }
     }
 
@@ -56,7 +60,9 @@ impl Lox {
             return;
         }
 
-        println!("{}", ast::printer::print_ast(&expression));
+        interpreter::interpret(expression, self);
+
+//        println!("{}", ast::printer::print_ast(&expression));
     }
 
     pub fn error_on_line(&mut self, line: u32, msg: &str) {
@@ -64,6 +70,10 @@ impl Lox {
     }
     pub fn error_at_token(&mut self, token: &TokenContext, msg: &str) {
         self.report(token.line, &format!("at '{}'", token.token), msg);
+    }
+    pub fn runtime_error(&mut self, error: interpreter::RuntimeError) {
+        println!("Runtime error: {}", error);
+        self.had_runtime_errors = true;
     }
 
     fn report(&mut self, line: u32, place: &str, msg: &str) {

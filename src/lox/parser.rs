@@ -4,13 +4,13 @@ use std::error;
 use super::Lox;
 use super::token::{TokenContext, Token};
 use super::token::Token::*;
-use super::ast::{Expr, Primitive};
+use super::ast::{Expr, Value};
 use super::ast::Expr::*;
 
 pub fn parse(tokens: Vec<TokenContext>, lox: &mut Lox) -> Expr {
     match ParserState::new(tokens, lox).expression() {
         Ok(e) => e,
-        Err(e) => Expr::Literal(Primitive::Nil),
+        Err(_) => Expr::Literal(Value::Nil),
     }
 }
 
@@ -100,11 +100,11 @@ impl <'a> ParserState<'a> {
     fn primary(&mut self) -> Result<Expr, ParseError> {
         let res = if let Some(token) = self.advance() {
             match token {
-                False => Literal(Primitive::Boolean(false)),
-                True => Literal(Primitive::Boolean(true)),
-                String(s) => Literal(Primitive::String(s)),
-                Number(num) => Literal(Primitive::Number(num)),
-                Nil => Literal(Primitive::Nil),
+                False => Literal(Value::Boolean(false)),
+                True => Literal(Value::Boolean(true)),
+                String(s) => Literal(Value::String(s)),
+                Number(num) => Literal(Value::Number(num)),
+                Nil => Literal(Value::Nil),
                 LeftParen => {
                     let expr = self.expression()?;
                     self.consume(&RightParen, "Expect ')' after grouped expression.")?;
@@ -147,11 +147,7 @@ impl <'a> ParserState<'a> {
     }
 
     fn check(&self, expected: &Token) -> bool {
-        if !self.is_at_end() && self.tokens[self.current].token == *expected {
-            true
-        } else {
-            false
-        }
+        !self.is_at_end() && self.tokens[self.current].token == *expected
     }
 
     fn consume(&mut self, token: &Token, msg: &str) -> Result<(), ParseError> {
