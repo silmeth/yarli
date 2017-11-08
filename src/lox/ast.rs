@@ -1,12 +1,53 @@
 use std::fmt;
 
-use super::token::Token;
-
 pub enum Expr {
-    Binary { lh: Box<Expr>, op: Token, rh: Box<Expr> },
-    Grouping(Box<Expr>),
+    Binary { lh: Box<Expr>, op: BiOperator, rh: Box<Expr> },
     Literal(Value),
-    Unary { op: Token, rh: Box<Expr> },
+    Unary { op: UnOperator, rh: Box<Expr> },
+}
+
+pub enum UnOperator {
+    Not,
+    Minus,
+}
+
+impl fmt::Display for UnOperator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            UnOperator::Not => write!(f, "!"),
+            UnOperator::Minus => write!(f, "-"),
+        }
+    }
+}
+
+pub enum BiOperator {
+    Plus,
+    Minus,
+    Mul,
+    Div,
+    Gt,
+    GtEq,
+    Lt,
+    LtEq,
+    Eq,
+    NotEq,
+}
+
+impl fmt::Display for BiOperator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BiOperator::Plus => write!(f, "+"),
+            BiOperator::Minus => write!(f, "-"),
+            BiOperator::Mul => write!(f, "*"),
+            BiOperator::Div => write!(f, "/"),
+            BiOperator::Gt => write!(f, ">"),
+            BiOperator::GtEq => write!(f, ">="),
+            BiOperator::Lt => write!(f, "<"),
+            BiOperator::LtEq => write!(f, "<="),
+            BiOperator::Eq => write!(f, "=="),
+            BiOperator::NotEq => write!(f, "!="),
+        }
+    }
 }
 
 #[derive(PartialEq,Debug,Clone)]
@@ -38,7 +79,6 @@ pub mod printer {
     pub fn print_ast(expr: &Expr) -> String {
         match *expr {
             Binary { ref lh, ref op, ref rh } => parenthesize(&format!("{}", op), &[lh, rh]),
-            Grouping(ref expr) => parenthesize("group", &[expr]),
             Literal(ref value) => match *value {
                 Value::Nil => String::from("nil"),
                 Value::Number(num) => format!("{}", num),
