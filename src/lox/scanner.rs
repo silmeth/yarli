@@ -119,7 +119,7 @@ impl <'a, 'b> ScannerState<'a, 'b> {
                 return;
             }
         };
-        self.add_token(String(value));
+        self.add_token(StringLit(value));
     }
 
     fn number(&mut self) {

@@ -4,14 +4,18 @@ use std::error;
 use super::Lox;
 use super::token::{TokenContext, Token};
 use super::token::Token::*;
-use super::ast::{Expr, Value, UnOperator, BiOperator};
+use super::ast::{Expr, Value, UnOperator, BiOperator, Stmt};
 use super::ast::Expr::*;
 
-pub fn parse(tokens: Vec<TokenContext>, lox: &mut Lox) -> Expr {
-    match ParserState::new(tokens, lox).expression() {
-        Ok(e) => e,
-        Err(_) => Expr::Literal(Value::Nil),
+pub fn parse(tokens: Vec<TokenContext>, lox: &mut Lox) -> Vec<Stmt> {
+    let mut state = ParserState::new(tokens, lox);
+    let mut stmts = Vec::new();
+    while state.peek() != Some(&Eof) && state.peek() != None {
+        if let Some(stmt) = state.declaration() {
+            stmts.push(stmt)
+        };
     }
+    stmts
 }
 
 struct ParserState<'a> {
@@ -107,38 +111,92 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    // primary → NUMBER | STRING | "false" | "true" | "nil" | "(" expr ")"
+    // primary → NUMBER | STRING | "false" | "true" | "nil" | identifier | "(" expr ")"
     fn primary(&mut self) -> Result<Expr, ParseError> {
         let res = if let Some(token) = self.advance() {
             match token {
                 False => Literal(Value::Boolean(false)),
                 True => Literal(Value::Boolean(true)),
-                String(s) => Literal(Value::String(s)),
+                StringLit(s) => Literal(Value::String(s)),
                 Number(num) => Literal(Value::Number(num)),
                 Nil => Literal(Value::Nil),
+                Identifier(s) => Variable(s),
                 LeftParen => {
                     let expr = self.expression()?;
                     self.consume(&RightParen, "Expect ')' after grouped expression.")?;
                     expr
                 }
-                _ => {
-                    let idx = self.current;
-                    return Err(self.error(idx, "Expect expression."));
-                }
+                _ => return Err(self.error("Expect expression.")),
             }
         } else {
             // last index reached
-            let idx = self.tokens.len() - 1;
-            return Err(self.error(idx, "Expect expression."));
+            return Err(self.error("Expect expression."));
         };
 
         Ok(res)
     }
 
+    // declaration → varDecl | statement
+    fn declaration(&mut self) -> Option<Stmt> {
+        let stmt = if let Some(_) = self.match_next(&[Var]) {
+            self.var_declaration()
+        } else {
+            self.statement()
+        };
+
+        match stmt {
+            Ok(stmt) => Some(stmt),
+            Err(_) => {
+                self.synchronize();
+                None
+            }
+        }
+    }
+
+    // varDecl → "var" identifier (= expr)? ";"
+    fn var_declaration(&mut self) -> Result<Stmt, ParseError> {
+        // "var" already consumed
+        let name = self.consume_identifier("Expect variable name.")?;
+
+        let initializer = match self.match_next(&[Equal]) {
+            Some(_) => self.expression()?,
+            None => Literal(Value::Nil),
+        };
+
+        self.consume(&Semicolon, "Expect ';' after variable declaration.");
+
+        Ok(Stmt::Var { name, initializer })
+    }
+
+
+    // statement → exprStmt | printStmt
+    fn statement(&mut self) -> Result<Stmt, ParseError> {
+        if let Some(_) = self.match_next(&[Print]) {
+            self.print_stmt()
+        } else {
+            self.expr_stmt()
+        }
+    }
+
+    // printStmt → "print" expr ";"
+    fn print_stmt(&mut self) -> Result<Stmt, ParseError> {
+        // "print" is already consumed
+        let expr = self.expression()?;
+        self.consume(&Semicolon, "Expect ';' after expression.")?;
+        Ok(Stmt::Print(expr))
+    }
+
+    // exprStmt → expr ";"
+    fn expr_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let expr = self.expression()?;
+        self.consume(&Semicolon, "Expect ';' after expression.")?;
+        Ok(Stmt::Expression(expr))
+    }
+
     #[inline]
     fn match_next(&mut self, expected_tokens: &[Token]) -> Option<Token> {
         for expected in expected_tokens {
-            if self.check(expected) {
+            if self.peek() == Some(expected) {
                 return self.advance();
             }
         }
@@ -160,37 +218,39 @@ impl<'a> ParserState<'a> {
     }
 
     #[inline]
-    fn check(&self, expected: &Token) -> bool {
-        self.tokens[self.current].token == *expected
+    fn peek(&self) -> Option<&Token> {
+        self.tokens.get(self.current).map(|ctx| &ctx.token)
     }
 
+    #[inline]
     fn consume(&mut self, token: &Token, msg: &str) -> Result<(), ParseError> {
-        if self.check(token) {
+        if self.peek() == Some(token) {
             let _ = self.advance();
             Ok(())
         } else {
             let current_idx = self.current;
-            Err(self.error(current_idx, msg))
+            Err(self.error(msg))
         }
     }
 
-    fn error(&mut self, token_idx: usize, msg: &str) -> ParseError {
-        self.lox.error_at_token(&self.tokens[token_idx], msg);
-        ParseError
+    #[inline]
+    fn consume_identifier(&mut self, msg: &str) -> Result<String, ParseError> {
+        match self.peek() {
+            Some(&Identifier(_)) => {
+                match self.advance().unwrap() {
+                    Identifier(s) => Ok(s),
+                    _ => unreachable!()
+                }
+            },
+            _ => Err(self.error(msg)),
+        }
     }
 
-//    fn synchronize(&mut self) {
-//        let mut prev = self.advance();
-//
-//        while prev != Some(Semicolon) && !self.is_at_end() && prev != None {
-//            match self.tokens[self.current].token {
-//                Class | Fun | Var | For | If | While | Print | Return => return,
-//                _ => { },
-//            }
-//
-//            prev = self.advance();
-//        }
-//    }
+    fn error(&mut self, msg: &str) -> ParseError {
+        use std::cmp::min;
+        self.lox.error_at_token(&self.tokens[min(self.tokens.len(), self.current)], msg);
+        ParseError
+    }
 
     fn synchronize(&mut self) {
         if let Some((idx, _)) = self.tokens.iter()

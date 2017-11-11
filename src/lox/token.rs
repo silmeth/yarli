@@ -27,7 +27,7 @@ pub enum Token {
 
     // Literals.
     Identifier(String),
-    String(String),
+    StringLit(String),
     Number(f64),
 
     // Keywords.
@@ -75,7 +75,7 @@ impl fmt::Display for Token {
             Less => write!(f, "<"),
             LessEqual => write!(f, "<="),
             Identifier(ref s) => write!(f, "{}", s),
-            String(ref s) => write!(f, "\"{}\"", s),
+            StringLit(ref s) => write!(f, "\"{}\"", s),
             Number(ref num) => write!(f, "{}", num),
             And => write!(f, "and"),
             Class => write!(f, "class"),

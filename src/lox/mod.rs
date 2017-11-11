@@ -54,13 +54,13 @@ impl Lox {
 
     pub fn run(&mut self, source: &[u8]) {
         let tokens = scanner::scan_tokens(source, self);
-        let expression = parser::parse(tokens, self);
+        let stmts = parser::parse(tokens, self);
 
         if self.had_errors {
             return;
         }
 
-        interpreter::interpret(expression, self);
+        interpreter::interpret(stmts, self);
 
 //        println!("{}", ast::printer::print_ast(&expression));
     }

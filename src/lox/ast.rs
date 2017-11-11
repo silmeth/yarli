@@ -4,6 +4,7 @@ pub enum Expr {
     Binary { lh: Box<Expr>, op: BiOperator, rh: Box<Expr> },
     Literal(Value),
     Unary { op: UnOperator, rh: Box<Expr> },
+    Variable(String),
 }
 
 pub enum UnOperator {
@@ -72,6 +73,12 @@ impl fmt::Display for Value {
     }
 }
 
+pub enum Stmt {
+    Expression(Expr),
+    Print(Expr),
+    Var { name: String, initializer: Expr },
+}
+
 pub mod printer {
     use super::{Expr, Value};
     use super::Expr::*;
@@ -86,7 +93,8 @@ pub mod printer {
                 Value::Boolean(b) => format!("{}", b),
                 // ref obj @ Value::Object() => format!("{:?}", obj),
             },
-            Unary { ref op, ref rh } => parenthesize(&format!("{}", op), &[rh])
+            Unary { ref op, ref rh } => parenthesize(&format!("{}", op), &[rh]),
+            Variable(ref s) => format!("var {}", s),
         }
     }
 

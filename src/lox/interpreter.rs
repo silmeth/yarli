@@ -1,18 +1,25 @@
 use std::fmt;
 use std::error;
 
-use super::ast::{Expr, Value, UnOperator, BiOperator};
+use super::ast::{Expr, Value, UnOperator, BiOperator, Stmt};
 use super::ast::Expr::*;
 use super::Lox;
 
-pub fn interpret(expr: Expr, lox: &mut Lox) {
-    match evaluate(expr) {
-        Ok(val) => println!("{}", val),
-        Err(e) => lox.runtime_error(e)
+type EvaluateResult = Result<Value, RuntimeError>;
+type InterpretResult = Result<(), EarlyExit>;
+
+pub fn interpret(stmts: Vec<Stmt>, lox: &mut Lox) {
+    for stmt in stmts {
+        if let Err(exit) = interpret_stmt(stmt) {
+            if let EarlyExit::Error(err) = exit {
+                lox.runtime_error(err);
+            }
+            break;
+        }
     }
 }
 
-fn evaluate(expr: Expr) -> Result<Value, RuntimeError> {
+fn evaluate(expr: Expr) -> EvaluateResult {
     let res = match expr {
         Literal(value) => value,
         Unary { op, rh } => match op {
@@ -41,10 +48,21 @@ fn evaluate(expr: Expr) -> Result<Value, RuntimeError> {
                 BiOperator::Eq => Value::Boolean(lh == rh),
                 BiOperator::NotEq => Value::Boolean(lh != rh),
             }
-        }
+        },
+        Variable(s) => unimplemented!(),
     };
 
     Ok(res)
+}
+
+fn interpret_stmt(stmt: Stmt) -> InterpretResult {
+    match stmt {
+        Stmt::Expression(expr) => { evaluate(expr)?; },
+        Stmt::Print(expr) => println!("{}", evaluate(expr)?),
+        Stmt::Var { .. } => unimplemented!(),
+    }
+
+    Ok(())
 }
 
 #[inline]
@@ -72,7 +90,7 @@ pub enum RuntimeError {
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            RuntimeError::TypeError{ expected, ref got } =>
+            RuntimeError::TypeError { expected, ref got } =>
                 write!(f, "Type error: expected {}, got {:?}.", expected, got),
         }
     }
@@ -80,10 +98,23 @@ impl fmt::Display for RuntimeError {
 
 impl error::Error for RuntimeError {
     fn description(&self) -> &str {
-        "Runtime error."
+        "runtime error"
     }
 
     fn cause(&self) -> Option<&error::Error> {
         None
+    }
+}
+
+// Hack for later to easily return from function calls on `return` statement using `?` without explicit matching.
+// Like using overridden stack-trace-less exceptions in Java.
+pub enum EarlyExit {
+    Error(RuntimeError),
+    Return(Value),
+}
+
+impl From<RuntimeError> for EarlyExit {
+    fn from(err: RuntimeError) -> Self {
+        EarlyExit::Error(err)
     }
 }
