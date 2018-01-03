@@ -1,4 +1,4 @@
-#![feature(ascii_ctype)]
+#[macro_use] extern crate failure;
 
 mod lox;
 use lox::Lox;

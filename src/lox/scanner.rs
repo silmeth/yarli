@@ -40,8 +40,6 @@ impl <'a, 'b> ScannerState<'a, 'b> {
     }
 
     fn scan_token(&mut self) {
-        use std::ascii::AsciiExt;
-
         let c = self.advance();
 
         match c {
@@ -97,7 +95,6 @@ impl <'a, 'b> ScannerState<'a, 'b> {
 
     fn string(&mut self) {
         use std::str;
-        use std::error::Error;
 
         while self.peek() != Some(b'"') && !self.is_at_end() {
             if let Some(b'\n') = self.peek() { self.line += 1; }
@@ -115,7 +112,7 @@ impl <'a, 'b> ScannerState<'a, 'b> {
         let value = match str::from_utf8(&self.source[self.start + 1 .. self.current - 1]) {
             Ok(s) => s.to_owned(),
             Err(e) => {
-                self.lox.error_on_line(self.line, &format!("String literal is not a valid UTF8. {}", e.description()));
+                self.lox.error_on_line(self.line, &format!("String literal is not a valid UTF-8. {}", e));
                 return;
             }
         };
@@ -124,7 +121,6 @@ impl <'a, 'b> ScannerState<'a, 'b> {
 
     fn number(&mut self) {
         use std::str;
-        use std::ascii::AsciiExt;
 
         while self.peek().map_or(false, |b| b.is_ascii_digit()) {
             self.advance();
@@ -147,7 +143,6 @@ impl <'a, 'b> ScannerState<'a, 'b> {
 
     fn identifier(&mut self) {
         use std::str;
-        use std::ascii::AsciiExt;
 
         while self.peek().map_or(false, |b| b.is_ascii_alphanumeric()) {
             self.advance();

@@ -1,6 +1,3 @@
-use std::fmt;
-use std::error;
-
 use super::ast::{Expr, Value, UnOperator, BiOperator, Stmt};
 use super::ast::Expr::*;
 use super::Lox;
@@ -81,29 +78,10 @@ fn expect_number(val: Value) -> Result<f64, RuntimeError> {
     }
 }
 
-// TODO: use `failure` crate for errors
-#[derive(Debug, Clone)]
+#[derive(Debug, Fail)]
 pub enum RuntimeError {
+    #[fail(display = "Type error: expected {}, got {:?}.", expected, got)]
     TypeError { expected: &'static str, got: Value }
-}
-
-impl fmt::Display for RuntimeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            RuntimeError::TypeError { expected, ref got } =>
-                write!(f, "Type error: expected {}, got {:?}.", expected, got),
-        }
-    }
-}
-
-impl error::Error for RuntimeError {
-    fn description(&self) -> &str {
-        "runtime error"
-    }
-
-    fn cause(&self) -> Option<&error::Error> {
-        None
-    }
 }
 
 // Hack for later to easily return from function calls on `return` statement using `?` without explicit matching.

@@ -1,6 +1,3 @@
-use std::fmt;
-use std::error;
-
 use super::Lox;
 use super::token::{TokenContext, Token};
 use super::token::Token::*;
@@ -228,7 +225,6 @@ impl<'a> ParserState<'a> {
             let _ = self.advance();
             Ok(())
         } else {
-            let current_idx = self.current;
             Err(self.error(msg))
         }
     }
@@ -265,21 +261,6 @@ impl<'a> ParserState<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Fail)]
+#[fail(display = "Parse error.")]
 struct ParseError;
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Parse error.")
-    }
-}
-
-impl error::Error for ParseError {
-    fn description(&self) -> &str {
-        "Parse error."
-    }
-
-    fn cause(&self) -> Option<&error::Error> {
-        None
-    }
-}
