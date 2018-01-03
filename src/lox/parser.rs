@@ -138,7 +138,7 @@ impl<'a> ParserState<'a> {
 
     // declaration → varDecl | statement
     fn declaration(&mut self) -> Option<Stmt> {
-        let stmt = if let Some(_) = self.match_next(&[Var]) {
+        let stmt = if self.match_next(&[Var]).is_some() {
             self.var_declaration()
         } else {
             self.statement()
@@ -171,7 +171,7 @@ impl<'a> ParserState<'a> {
 
     // statement → exprStmt | printStmt
     fn statement(&mut self) -> Result<Stmt, ParseError> {
-        if let Some(_) = self.match_next(&[Print]) {
+        if self.match_next(&[Print]).is_some() {
             self.print_stmt()
         } else {
             self.expr_stmt()
