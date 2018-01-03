@@ -30,9 +30,25 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    // expression → equality
+    // expression → assignment
     fn expression(&mut self) -> Result<Expr, ParseError> {
-        self.equality()
+        self.assignment()
+    }
+
+    // assignment → (identifier "=" assignment) | equality
+    fn assignment(&mut self) -> Result<Expr, ParseError> {
+        let expr = self.equality()?;
+
+        if self.match_next(&[Equal]).is_some() {
+            let value = self.assignment()?;
+
+            match expr {
+                Variable(name) => Ok(Assign { name, value: Box::new(value) }),
+                _ => Err(self.error("Invalid assignment target."))
+            }
+        } else {
+            Ok(expr)
+        }
     }
 
     // equality → comparison (("==" | "!=") comparison)*

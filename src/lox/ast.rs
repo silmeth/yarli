@@ -5,6 +5,10 @@ pub enum Expr {
     Literal(Value),
     Unary { op: UnOperator, rh: Box<Expr> },
     Variable(String),
+    Assign {
+        name: String,
+        value: Box<Expr>
+    },
 }
 
 pub enum UnOperator {
@@ -95,6 +99,7 @@ pub mod printer {
             },
             Unary { ref op, ref rh } => parenthesize(&format!("{}", op), &[rh]),
             Variable(ref s) => format!("var {}", s),
+            Assign { ref name, ref value } => format!("assignment {} = {}", name, print_ast(value)),
         }
     }
 

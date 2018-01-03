@@ -30,7 +30,7 @@ impl Interpreter {
         }
     }
 
-    fn evaluate(&self, expr: Expr) -> EvaluateResult {
+    fn evaluate(&mut self, expr: Expr) -> EvaluateResult {
         let res = match expr {
             Literal(value) => value,
             Unary { op, rh } => match op {
@@ -62,6 +62,11 @@ impl Interpreter {
             },
             Variable(s) => {
                 self.environment.get(&s)?
+            },
+            Assign { name, value } => {
+                let value = self.evaluate(*value)?;
+                self.environment.assign(name, value.clone())?; // TODO: use Rc<> or another reference
+                value
             },
         };
 
@@ -95,6 +100,15 @@ impl Environment {
 
     fn define(&mut self, name: String, value: Value) {
         let _ = self.values.insert(name, value);
+    }
+
+    fn assign(&mut self, name: String, value: Value) -> Result<(), RuntimeError> {
+        if self.values.contains_key(&name) {
+            let _ = self.values.insert(name, value);
+            Ok(())
+        } else {
+            Err(RuntimeError::UndefinedError { name: name })
+        }
     }
 
     // TODO: rethink this. This always copies a value.
