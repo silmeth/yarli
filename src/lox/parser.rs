@@ -163,7 +163,7 @@ impl<'a> ParserState<'a> {
             None => Literal(Value::Nil),
         };
 
-        self.consume(&Semicolon, "Expect ';' after variable declaration.");
+        self.consume(&Semicolon, "Expect ';' after variable declaration.")?;
 
         Ok(Stmt::Var { name, initializer })
     }
