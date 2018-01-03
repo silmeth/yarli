@@ -10,6 +10,7 @@ mod parser;
 mod interpreter;
 
 use self::token::TokenContext;
+use self::interpreter::Interpreter;
 
 pub struct Lox {
     had_errors: bool,
@@ -28,7 +29,9 @@ impl Lox {
         let mut file = File::open(path).expect("Could not open source file");
         let mut contents = Vec::new();
         file.read_to_end(&mut contents).expect("Could not read source file content");
-        self.run(&contents);
+        let mut interpreter = Interpreter::new();
+
+        self.run(&contents, &mut interpreter);
 
         if self.had_errors {
             exit(65);
@@ -40,11 +43,12 @@ impl Lox {
 
     pub fn run_prompt(&mut self) {
         let mut line = String::new();
+        let mut interpreter = Interpreter::new();
         loop {
             print!("> ");
             io::stdout().flush().unwrap();
             match io::stdin().read_line(&mut line) {
-                Ok(_) => self.run(line.as_bytes()),
+                Ok(_) => self.run(line.as_bytes(), &mut interpreter),
                 Err(_) => println!("Could not read input!")
             };
             line.clear();
@@ -52,7 +56,7 @@ impl Lox {
         }
     }
 
-    pub fn run(&mut self, source: &[u8]) {
+    pub fn run(&mut self, source: &[u8], interpreter: &mut Interpreter) {
         let tokens = scanner::scan_tokens(source, self);
         let stmts = parser::parse(tokens, self);
 
@@ -60,7 +64,7 @@ impl Lox {
             return;
         }
 
-        interpreter::interpret(stmts, self);
+        interpreter.interpret(stmts, self);
 
 //        println!("{}", ast::printer::print_ast(&expression));
     }
