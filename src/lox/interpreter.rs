@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use super::ast::{Expr, Value, UnOperator, BiOperator, Stmt};
 use super::ast::Expr::*;
@@ -35,27 +36,27 @@ impl Interpreter {
             Literal(value) => value,
             Unary { op, rh } => match op {
                 UnOperator::Not => Value::Boolean(!is_truthy(&self.evaluate(*rh)?)),
-                UnOperator::Minus => Value::Number(-expect_number(self.evaluate(*rh)?)?),
+                UnOperator::Minus => Value::Number(-expect_number(&self.evaluate(*rh)?)?),
             },
             Binary { lh, op, rh } => {
                 let lh = self.evaluate(*lh)?;
                 let rh = self.evaluate(*rh)?;
 
                 match op {
-                    BiOperator::Minus => Value::Number(expect_number(lh)? - expect_number(rh)?),
-                    BiOperator::Div => Value::Number(expect_number(lh)? / expect_number(rh)?),
-                    BiOperator::Mul => Value::Number(expect_number(lh)? * expect_number(rh)?),
+                    BiOperator::Minus => Value::Number(expect_number(&lh)? - expect_number(&rh)?),
+                    BiOperator::Div => Value::Number(expect_number(&lh)? / expect_number(&rh)?),
+                    BiOperator::Mul => Value::Number(expect_number(&lh)? * expect_number(&rh)?),
                     BiOperator::Plus => match (lh, rh) {
                         (Value::Number(lh), Value::Number(rh)) => Value::Number(lh + rh),
-                        (Value::String(lh), Value::String(rh)) => Value::String(lh + &rh),
-                        (Value::Number(_), rh) => return Err(RuntimeError::TypeError { expected: "number", got: rh }),
-                        (Value::String(_), rh) => return Err(RuntimeError::TypeError { expected: "string", got: rh }),
-                        (lh, _) => return Err(RuntimeError::TypeError { expected: "number or string", got: lh }),
+                        (Value::String(lh), Value::String(rh)) => Value::String(Rc::from((*lh).to_owned() + &*rh)),
+                        (Value::Number(_), rh) => return Err(RuntimeError::type_error("number", &rh)),
+                        (Value::String(_), rh) => return Err(RuntimeError::type_error("string", &rh)),
+                        (lh, _) => return Err(RuntimeError::type_error("number or string", &lh)),
                     },
-                    BiOperator::Gt => Value::Boolean(expect_number(lh)? > expect_number(rh)?),
-                    BiOperator::GtEq => Value::Boolean(expect_number(lh)? >= expect_number(rh)?),
-                    BiOperator::Lt => Value::Boolean(expect_number(lh)? < expect_number(rh)?),
-                    BiOperator::LtEq => Value::Boolean(expect_number(lh)? <= expect_number(rh)?),
+                    BiOperator::Gt => Value::Boolean(expect_number(&lh)? > expect_number(&rh)?),
+                    BiOperator::GtEq => Value::Boolean(expect_number(&lh)? >= expect_number(&rh)?),
+                    BiOperator::Lt => Value::Boolean(expect_number(&lh)? < expect_number(&rh)?),
+                    BiOperator::LtEq => Value::Boolean(expect_number(&lh)? <= expect_number(&rh)?),
                     BiOperator::Eq => Value::Boolean(lh == rh),
                     BiOperator::NotEq => Value::Boolean(lh != rh),
                 }
@@ -65,7 +66,7 @@ impl Interpreter {
             },
             Assign { name, value } => {
                 let value = self.evaluate(*value)?;
-                self.environment.assign(name, value.clone())?; // TODO: use Rc<> or another reference
+                self.environment.assign(name, value.clone())?;
                 value
             },
         };
@@ -111,11 +112,6 @@ impl Environment {
         }
     }
 
-    // TODO: rethink this. This always copies a value.
-    // * might be expensive for strings,
-    // * makes it impossible to share two references to one object
-    //   (is that correct behaviour for mutable objects?)
-    // Perhaps making EvaluateResult = Result<Rc<Value>, RuntimeError> would be OK.
     fn get(&self, name: &str) -> EvaluateResult {
         self.values.get(name)
             .cloned()
@@ -132,19 +128,29 @@ fn is_truthy(val: &Value) -> bool {
 }
 
 #[inline]
-fn expect_number(val: Value) -> Result<f64, RuntimeError> {
-    match val {
+fn expect_number(val: &Value) -> Result<f64, RuntimeError> {
+    match *val {
         Value::Number(num) => Ok(num),
-        _ => Err(RuntimeError::TypeError { expected: "number", got: val }),
+        _ => Err(RuntimeError::type_error("number", val)),
     }
 }
 
 #[derive(Debug, Fail)]
 pub enum RuntimeError {
-    #[fail(display = "Type error: expected {}, got {:?}.", expected, got)]
-    TypeError { expected: &'static str, got: Value },
+    #[fail(display = "Type error: expected {}, got {} with value {}.", expected, type_name, value)]
+    TypeError { expected: &'static str, type_name: &'static str, value: String },
     #[fail(display = "Undefined variable {}.", name)]
     UndefinedError { name: String },
+}
+
+impl RuntimeError {
+    fn type_error(expected: &'static str, value: &Value) -> RuntimeError {
+        RuntimeError::TypeError {
+            expected,
+            type_name: value.type_name(),
+            value: value.to_string(),
+        }
+    }
 }
 
 // Hack for later to easily return from function calls on `return` statement using `?` without explicit matching.

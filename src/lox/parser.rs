@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::Lox;
 use super::token::{TokenContext, Token};
 use super::token::Token::*;
@@ -130,7 +132,7 @@ impl<'a> ParserState<'a> {
             match token {
                 False => Literal(Value::Boolean(false)),
                 True => Literal(Value::Boolean(true)),
-                StringLit(s) => Literal(Value::String(s)),
+                StringLit(s) => Literal(Value::String(Rc::from(s))),
                 Number(num) => Literal(Value::Number(num)),
                 Nil => Literal(Value::Nil),
                 Identifier(s) => Variable(s),

@@ -1,4 +1,5 @@
 use std::fmt;
+use std::rc::Rc;
 
 pub enum Expr {
     Binary { lh: Box<Expr>, op: BiOperator, rh: Box<Expr> },
@@ -57,12 +58,23 @@ impl fmt::Display for BiOperator {
 
 #[derive(PartialEq,Debug,Clone)]
 pub enum Value {
-    String(String),
+    String(Rc<str>),
     Number(f64),
     Boolean(bool),
     Nil,
-    // Object(),
+    // Object(Rc<RefCell<ObjectStruct>>),
     // Function(),
+}
+
+impl Value {
+    pub fn type_name(&self) -> &'static str {
+        match *self {
+            Value::String(_) => "string",
+            Value::Number(_) => "number",
+            Value::Boolean(_) => "boolean",
+            Value::Nil => "nil",
+        }
+    }
 }
 
 impl fmt::Display for Value {
@@ -93,7 +105,7 @@ pub mod printer {
             Literal(ref value) => match *value {
                 Value::Nil => String::from("nil"),
                 Value::Number(num) => format!("{}", num),
-                Value::String(ref s) => s.clone(),
+                Value::String(ref s) => (**s).to_owned(),
                 Value::Boolean(b) => format!("{}", b),
                 // ref obj @ Value::Object() => format!("{:?}", obj),
             },
