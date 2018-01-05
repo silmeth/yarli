@@ -16,7 +16,7 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
-            environment: Environment::new()
+            environment: Environment::new_global(),
         }
     }
 
@@ -82,21 +82,68 @@ impl Interpreter {
                 let value = self.evaluate(initializer)?;
                 self.environment.define(name, value);
             },
+            Stmt::Block(stmts) => self.execute_block(stmts)?,
         }
 
         Ok(())
+    }
+
+    fn execute_block(&mut self, stmts: Vec<Stmt>) -> InterpretResult {
+        self.environment.push_new_local();
+
+        let mut res = Ok(());
+        for stmt in stmts {
+            res = self.interpret_stmt(stmt);
+
+            if res.is_err() {
+                break;
+            }
+        }
+
+        // We are at the end of a block, there must be a parent environment.
+        self.environment.pop_local().unwrap();
+
+        res
     }
 }
 
 struct Environment {
     values: HashMap<String, Value>,
+    // Perhaps having a Option<&mut> ref would be better here,
+    // then environment would need to be decoupled from interpreter and always passed by ref.
+    // This solution is more comparable to jlox though.
+    enclosing: Option<Box<Environment>>
 }
 
 impl Environment {
-    fn new() -> Environment {
+    fn new_global() -> Environment {
         Environment {
-            values: HashMap::new()
+            values: HashMap::new(),
+            enclosing: None,
         }
+    }
+
+    fn push_new_local(&mut self) {
+        use std::mem::replace;
+
+        let parent_values = replace(&mut self.values, HashMap::new());
+        let parent_enclosing = self.enclosing.take();
+
+        self.enclosing = Some(Box::new(Environment {
+            values: parent_values,
+            enclosing: parent_enclosing,
+        }))
+    }
+
+    fn pop_local(&mut self) -> Option<()> {
+        match self.enclosing.take() {
+            Some(parent) => {
+                *self = *parent;
+                Some(())
+            },
+            _ => None
+        }
+
     }
 
     fn define(&mut self, name: String, value: Value) {
@@ -108,14 +155,24 @@ impl Environment {
             let _ = self.values.insert(name, value);
             Ok(())
         } else {
-            Err(RuntimeError::UndefinedError { name: name })
+            match self.enclosing {
+                Some(ref mut enclosing) => {
+                    enclosing.assign(name, value)?;
+                    Ok(())
+                },
+                None => Err(RuntimeError::UndefinedError { name: name.to_owned() })
+            }
         }
     }
 
     fn get(&self, name: &str) -> EvaluateResult {
-        self.values.get(name)
-            .cloned()
-            .ok_or_else(|| RuntimeError::UndefinedError { name: name.to_owned() })
+        match self.values.get(name) {
+            Some(val) => Ok(val.clone()),
+            None => match self.enclosing {
+                Some(ref enclosing) => Ok(enclosing.get(name)?),
+                None => Err(RuntimeError::UndefinedError { name: name.to_owned() })
+            },
+        }
     }
 }
 

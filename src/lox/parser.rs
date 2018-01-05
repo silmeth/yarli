@@ -10,7 +10,7 @@ pub fn parse(tokens: Vec<TokenContext>, lox: &mut Lox) -> Vec<Stmt> {
     let mut state = ParserState::new(tokens, lox);
     let mut stmts = Vec::new();
     while state.peek() != Some(&Eof) && state.peek() != None {
-        if let Some(stmt) = state.declaration() {
+        if let Ok(stmt) = state.declaration() {
             stmts.push(stmt)
         };
     }
@@ -152,23 +152,17 @@ impl<'a> ParserState<'a> {
     }
 
     // declaration → varDecl | statement
-    fn declaration(&mut self) -> Option<Stmt> {
-        let stmt = if self.match_next(&[Var]).is_some() {
+    fn declaration(&mut self) -> Result<Stmt, ParseError> {
+        let res = if self.match_next(&[Var]).is_some() {
             self.var_declaration()
         } else {
             self.statement()
         };
 
-        match stmt {
-            Ok(stmt) => Some(stmt),
-            Err(_) => {
-                self.synchronize();
-                None
-            }
-        }
+        res.map_err(|e| { self.synchronize(); e })
     }
 
-    // varDecl → "var" identifier (= expr)? ";"
+    // varDecl → "var" identifier ("=" expr)? ";"
     fn var_declaration(&mut self) -> Result<Stmt, ParseError> {
         // "var" already consumed
         let name = self.consume_identifier("Expect variable name.")?;
@@ -184,10 +178,12 @@ impl<'a> ParserState<'a> {
     }
 
 
-    // statement → exprStmt | printStmt
+    // statement → exprStmt | printStmt | block
     fn statement(&mut self) -> Result<Stmt, ParseError> {
         if self.match_next(&[Print]).is_some() {
             self.print_stmt()
+        } else if self.match_next(&[LeftBrace]).is_some() {
+            self.block()
         } else {
             self.expr_stmt()
         }
@@ -199,6 +195,18 @@ impl<'a> ParserState<'a> {
         let expr = self.expression()?;
         self.consume(&Semicolon, "Expect ';' after expression.")?;
         Ok(Stmt::Print(expr))
+    }
+
+    // block → "{" (declaration)* "}"
+    fn block(&mut self) -> Result<Stmt, ParseError> {
+        let mut stmts = Vec::new();
+
+        while self.peek() != Some(&RightBrace) && self.peek() != None {
+            stmts.push(self.declaration()?)
+        }
+
+        self.consume(&RightBrace, "Expect '}' after block.")?;
+        Ok(Stmt::Block(stmts))
     }
 
     // exprStmt → expr ";"

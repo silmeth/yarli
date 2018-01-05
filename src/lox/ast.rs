@@ -93,6 +93,7 @@ pub enum Stmt {
     Expression(Expr),
     Print(Expr),
     Var { name: String, initializer: Expr },
+    Block(Vec<Stmt>),
 }
 
 pub mod printer {
