@@ -3,7 +3,7 @@ use std::rc::Rc;
 use super::Lox;
 use super::token::{TokenContext, Token};
 use super::token::Token::*;
-use super::ast::{Expr, Value, UnOperator, BiOperator, Stmt};
+use super::ast::{Expr, Value, UnOperator, BiOperator, LogicOperator, Stmt};
 use super::ast::Expr::*;
 
 pub fn parse(tokens: Vec<TokenContext>, lox: &mut Lox) -> Vec<Stmt> {
@@ -37,9 +37,9 @@ impl<'a> ParserState<'a> {
         self.assignment()
     }
 
-    // assignment → (identifier "=" assignment) | equality
+    // assignment → (identifier "=" assignment) | logicOr
     fn assignment(&mut self) -> Result<Expr, ParseError> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if self.match_next(&[Equal]).is_some() {
             let value = self.assignment()?;
@@ -51,6 +51,30 @@ impl<'a> ParserState<'a> {
         } else {
             Ok(expr)
         }
+    }
+
+    // logicOr → logicAnd ("or" logicAnd)*
+    fn or(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.and()?;
+
+        while self.match_next(&[Or]).is_some() {
+            let rh = self.and()?;
+            expr = Expr::Logic { lh: Box::new(expr), op: LogicOperator::Or, rh: Box::new(rh) };
+        }
+
+        Ok(expr)
+    }
+
+    // logicAnd → equality ("and" equality)*
+    fn and(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.equality()?;
+
+        while self.match_next(&[And]).is_some() {
+            let rh = self.equality()?;
+            expr = Expr::Logic { lh: Box::new(expr), op: LogicOperator::And, rh: Box::new(rh) };
+        }
+
+        Ok(expr)
     }
 
     // equality → comparison (("==" | "!=") comparison)*
@@ -198,7 +222,7 @@ impl<'a> ParserState<'a> {
 
         let condition = self.expression()?;
 
-        self.consume(&RightParen, "Expect '(' after 'if' condition.")?;
+        self.consume(&RightParen, "Expect ')' after if condition.")?;
 
         let if_branch = Box::new(self.statement()?);
 

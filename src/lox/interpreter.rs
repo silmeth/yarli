@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use super::ast::{Expr, Value, UnOperator, BiOperator, Stmt};
+use super::ast::{Expr, Value, UnOperator, BiOperator, LogicOperator, Stmt};
 use super::ast::Expr::*;
 use super::Lox;
 
@@ -69,6 +69,15 @@ impl Interpreter {
                 self.environment.assign(name, value.clone())?;
                 value
             },
+            Logic { lh, op, rh } => {
+                let lh = self.evaluate(*lh)?;
+
+                match op {
+                    LogicOperator::Or if is_truthy(&lh) => lh,
+                    LogicOperator::And if !is_truthy(&lh) => lh,
+                    _ => self.evaluate(*rh)?,
+                }
+            }
         };
 
         Ok(res)

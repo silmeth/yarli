@@ -6,10 +6,8 @@ pub enum Expr {
     Literal(Value),
     Unary { op: UnOperator, rh: Box<Expr> },
     Variable(String),
-    Assign {
-        name: String,
-        value: Box<Expr>
-    },
+    Assign { name: String, value: Box<Expr> },
+    Logic { lh: Box<Expr>, op: LogicOperator, rh: Box<Expr> },
 }
 
 pub enum UnOperator {
@@ -52,6 +50,20 @@ impl fmt::Display for BiOperator {
             BiOperator::LtEq => write!(f, "<="),
             BiOperator::Eq => write!(f, "=="),
             BiOperator::NotEq => write!(f, "!="),
+        }
+    }
+}
+
+pub enum LogicOperator {
+    Or,
+    And,
+}
+
+impl fmt::Display for LogicOperator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            LogicOperator::Or => write!(f, "or"),
+            LogicOperator::And => write!(f, "and"),
         }
     }
 }
@@ -114,6 +126,7 @@ pub mod printer {
             Unary { ref op, ref rh } => parenthesize(&format!("{}", op), &[rh]),
             Variable(ref s) => format!("var {}", s),
             Assign { ref name, ref value } => format!("assignment {} = {}", name, print_ast(value)),
+            Logic { ref lh, ref op, ref rh } => parenthesize(&format!("{}", op), &[lh, rh]),
         }
     }
 
