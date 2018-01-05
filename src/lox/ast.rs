@@ -68,7 +68,7 @@ impl fmt::Display for LogicOperator {
     }
 }
 
-#[derive(PartialEq,Debug,Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Value {
     String(Rc<str>),
     Number(f64),

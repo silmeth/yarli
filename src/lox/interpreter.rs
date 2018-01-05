@@ -60,15 +60,15 @@ impl Interpreter {
                     BiOperator::Eq => Value::Boolean(lh == rh),
                     BiOperator::NotEq => Value::Boolean(lh != rh),
                 }
-            },
+            }
             Variable(s) => {
                 self.environment.get(&s)?
-            },
+            }
             Assign { name, value } => {
                 let value = self.evaluate(*value)?;
                 self.environment.assign(name, value.clone())?;
                 value
-            },
+            }
             Logic { lh, op, rh } => {
                 let lh = self.evaluate(*lh)?;
 
@@ -85,20 +85,18 @@ impl Interpreter {
 
     fn interpret_stmt(&mut self, stmt: Stmt) -> InterpretResult {
         match stmt {
-            Stmt::Expression(expr) => { self.evaluate(expr)?; },
+            Stmt::Expression(expr) => { self.evaluate(expr)?; }
             Stmt::Print(expr) => println!("{}", self.evaluate(expr)?),
             Stmt::Var { name, initializer } => {
                 let value = self.evaluate(initializer)?;
                 self.environment.define(name, value);
-            },
+            }
             Stmt::Block(stmts) => self.execute_block(stmts)?,
             Stmt::If { condition, then_branch, else_branch } => {
                 if is_truthy(&self.evaluate(condition)?) {
                     self.interpret_stmt(*then_branch)?;
-                } else {
-                    if let Some(else_branch) = else_branch {
-                        self.interpret_stmt(*else_branch)?;
-                    }
+                } else if let Some(else_branch) = else_branch {
+                    self.interpret_stmt(*else_branch)?;
                 }
             }
         }
@@ -130,7 +128,7 @@ struct Environment {
     // Perhaps having a Option<&mut> ref would be better here,
     // then environment would need to be decoupled from interpreter and always passed by ref.
     // This solution is more comparable to jlox though.
-    enclosing: Option<Box<Environment>>
+    enclosing: Option<Box<Environment>>,
 }
 
 impl Environment {
@@ -158,10 +156,9 @@ impl Environment {
             Some(parent) => {
                 *self = *parent;
                 Some(())
-            },
+            }
             _ => None
         }
-
     }
 
     fn define(&mut self, name: String, value: Value) {
@@ -177,7 +174,7 @@ impl Environment {
                 Some(ref mut enclosing) => {
                     enclosing.assign(name, value)?;
                     Ok(())
-                },
+                }
                 None => Err(RuntimeError::UndefinedError { name: name.to_owned() })
             }
         }

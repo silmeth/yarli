@@ -183,7 +183,10 @@ impl<'a> ParserState<'a> {
             self.statement()
         };
 
-        res.map_err(|e| { self.synchronize(); e })
+        res.map_err(|e| {
+            self.synchronize();
+            e
+        })
     }
 
     // varDecl → "var" identifier ("=" expr)? ";"
@@ -230,7 +233,7 @@ impl<'a> ParserState<'a> {
             Some(self.statement()?)
         } else {
             None
-        }.map(|stmt| Box::new(stmt));
+        }.map(Box::new);
 
         Ok(Stmt::If { condition, then_branch: if_branch, else_branch })
     }
@@ -282,7 +285,7 @@ impl<'a> ParserState<'a> {
             Some(token) => {
                 self.current += 1;
                 Some(mem::replace(&mut token.token, Nil))
-            },
+            }
         }
     }
 
@@ -309,7 +312,7 @@ impl<'a> ParserState<'a> {
                     Identifier(s) => Ok(s),
                     _ => unreachable!()
                 }
-            },
+            }
             _ => Err(self.error(msg)),
         }
     }
