@@ -178,15 +178,37 @@ impl<'a> ParserState<'a> {
     }
 
 
-    // statement → exprStmt | printStmt | block
+    // statement → exprStmt | ifStmt | printStmt | block
     fn statement(&mut self) -> Result<Stmt, ParseError> {
         if self.match_next(&[Print]).is_some() {
             self.print_stmt()
+        } else if self.match_next(&[If]).is_some() {
+            self.if_stmt()
         } else if self.match_next(&[LeftBrace]).is_some() {
             self.block()
         } else {
             self.expr_stmt()
         }
+    }
+
+    // ifStmt → if "(" expr ")" statement ("else" statement)?
+    fn if_stmt(&mut self) -> Result<Stmt, ParseError> {
+        // "if" already consumed
+        self.consume(&LeftParen, "Expect '(' after 'if'.")?;
+
+        let condition = self.expression()?;
+
+        self.consume(&RightParen, "Expect '(' after 'if' condition.")?;
+
+        let if_branch = Box::new(self.statement()?);
+
+        let else_branch = if self.match_next(&[Else]).is_some() {
+            Some(self.statement()?)
+        } else {
+            None
+        }.map(|stmt| Box::new(stmt));
+
+        Ok(Stmt::If { condition, then_branch: if_branch, else_branch })
     }
 
     // printStmt → "print" expr ";"

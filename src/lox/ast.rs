@@ -94,6 +94,7 @@ pub enum Stmt {
     Print(Expr),
     Var { name: String, initializer: Expr },
     Block(Vec<Stmt>),
+    If { condition: Expr, then_branch: Box<Stmt>, else_branch: Option<Box<Stmt>> },
 }
 
 pub mod printer {

@@ -83,6 +83,15 @@ impl Interpreter {
                 self.environment.define(name, value);
             },
             Stmt::Block(stmts) => self.execute_block(stmts)?,
+            Stmt::If { condition, then_branch, else_branch } => {
+                if is_truthy(&self.evaluate(condition)?) {
+                    self.interpret_stmt(*then_branch)?;
+                } else {
+                    if let Some(else_branch) = else_branch {
+                        self.interpret_stmt(*else_branch)?;
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -194,7 +203,7 @@ fn expect_number(val: &Value) -> Result<f64, RuntimeError> {
 
 #[derive(Debug, Fail)]
 pub enum RuntimeError {
-    #[fail(display = "Type error: expected {}, got {} with value {}.", expected, type_name, value)]
+    #[fail(display = "Type error: expected {} value, got {} ({}).", expected, value, type_name)]
     TypeError { expected: &'static str, type_name: &'static str, value: String },
     #[fail(display = "Undefined variable {}.", name)]
     UndefinedError { name: String },
