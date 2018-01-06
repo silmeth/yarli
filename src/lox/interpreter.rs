@@ -22,7 +22,7 @@ impl Interpreter {
 
     pub fn interpret(&mut self, stmts: Vec<Stmt>, lox: &mut Lox) {
         for stmt in stmts {
-            if let Err(exit) = self.interpret_stmt(stmt) {
+            if let Err(exit) = self.interpret_stmt(&stmt) {
                 if let EarlyExit::Error(err) = exit {
                     lox.runtime_error(err);
                 }
@@ -31,18 +31,18 @@ impl Interpreter {
         }
     }
 
-    fn evaluate(&mut self, expr: Expr) -> EvaluateResult {
-        let res = match expr {
-            Literal(value) => value,
-            Unary { op, rh } => match op {
-                UnOperator::Not => Value::Boolean(!is_truthy(&self.evaluate(*rh)?)),
-                UnOperator::Minus => Value::Number(-expect_number(&self.evaluate(*rh)?)?),
+    fn evaluate(&mut self, expr: &Expr) -> EvaluateResult {
+        let res = match *expr {
+            Literal(ref value) => value.clone(),
+            Unary { ref op, ref rh } => match *op {
+                UnOperator::Not => Value::Boolean(!is_truthy(&self.evaluate(&*rh)?)),
+                UnOperator::Minus => Value::Number(-expect_number(&self.evaluate(&*rh)?)?),
             },
-            Binary { lh, op, rh } => {
-                let lh = self.evaluate(*lh)?;
-                let rh = self.evaluate(*rh)?;
+            Binary { ref lh, ref op, ref rh } => {
+                let lh = self.evaluate(&*lh)?;
+                let rh = self.evaluate(&*rh)?;
 
-                match op {
+                match *op {
                     BiOperator::Minus => Value::Number(expect_number(&lh)? - expect_number(&rh)?),
                     BiOperator::Div => Value::Number(expect_number(&lh)? / expect_number(&rh)?),
                     BiOperator::Mul => Value::Number(expect_number(&lh)? * expect_number(&rh)?),
@@ -61,21 +61,21 @@ impl Interpreter {
                     BiOperator::NotEq => Value::Boolean(lh != rh),
                 }
             }
-            Variable(s) => {
-                self.environment.get(&s)?
+            Variable(ref s) => {
+                self.environment.get(s)?
             }
-            Assign { name, value } => {
-                let value = self.evaluate(*value)?;
-                self.environment.assign(name, value.clone())?;
+            Assign { ref name, ref value } => {
+                let value = self.evaluate(&*value)?;
+                self.environment.assign(name.to_owned(), value.clone())?;
                 value
             }
-            Logic { lh, op, rh } => {
-                let lh = self.evaluate(*lh)?;
+            Logic { ref lh, ref op, ref rh } => {
+                let lh = self.evaluate(&*lh)?;
 
-                match op {
+                match *op {
                     LogicOperator::Or if is_truthy(&lh) => lh,
                     LogicOperator::And if !is_truthy(&lh) => lh,
-                    _ => self.evaluate(*rh)?,
+                    _ => self.evaluate(&*rh)?,
                 }
             }
         };
@@ -83,20 +83,25 @@ impl Interpreter {
         Ok(res)
     }
 
-    fn interpret_stmt(&mut self, stmt: Stmt) -> InterpretResult {
-        match stmt {
-            Stmt::Expression(expr) => { self.evaluate(expr)?; }
-            Stmt::Print(expr) => println!("{}", self.evaluate(expr)?),
-            Stmt::Var { name, initializer } => {
+    fn interpret_stmt(&mut self, stmt: &Stmt) -> InterpretResult {
+        match *stmt {
+            Stmt::Expression(ref expr) => { self.evaluate(expr)?; }
+            Stmt::Print(ref expr) => println!("{}", self.evaluate(expr)?),
+            Stmt::Var { ref name, ref initializer } => {
                 let value = self.evaluate(initializer)?;
-                self.environment.define(name, value);
+                self.environment.define(name.to_owned(), value);
             }
-            Stmt::Block(stmts) => self.execute_block(stmts)?,
-            Stmt::If { condition, then_branch, else_branch } => {
+            Stmt::Block(ref stmts) => self.execute_block(stmts)?,
+            Stmt::If { ref condition, ref then_branch, ref else_branch } => {
                 if is_truthy(&self.evaluate(condition)?) {
-                    self.interpret_stmt(*then_branch)?;
-                } else if let Some(else_branch) = else_branch {
-                    self.interpret_stmt(*else_branch)?;
+                    self.interpret_stmt(&*then_branch)?;
+                } else if let Some(ref else_branch) = *else_branch {
+                    self.interpret_stmt(&*else_branch)?;
+                }
+            }
+            Stmt::While { ref condition, ref body } => {
+                while is_truthy(&self.evaluate(condition)?) {
+                    self.interpret_stmt(&*body)?;
                 }
             }
         }
@@ -104,7 +109,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_block(&mut self, stmts: Vec<Stmt>) -> InterpretResult {
+    fn execute_block(&mut self, stmts: &[Stmt]) -> InterpretResult {
         self.environment.push_new_local();
 
         let mut res = Ok(());

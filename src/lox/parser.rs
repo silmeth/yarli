@@ -189,7 +189,7 @@ impl<'a> ParserState<'a> {
         })
     }
 
-    // varDecl → "var" identifier ("=" expr)? ";"
+    // varDecl → "var" identifier ("=" expression)? ";"
     fn var_declaration(&mut self) -> Result<Stmt, ParseError> {
         // "var" already consumed
         let name = self.consume_identifier("Expect variable name.")?;
@@ -205,20 +205,18 @@ impl<'a> ParserState<'a> {
     }
 
 
-    // statement → exprStmt | ifStmt | printStmt | block
+    // statement → exprStmt | ifStmt | printStmt | whileStmt | block
     fn statement(&mut self) -> Result<Stmt, ParseError> {
-        if self.match_next(&[Print]).is_some() {
-            self.print_stmt()
-        } else if self.match_next(&[If]).is_some() {
-            self.if_stmt()
-        } else if self.match_next(&[LeftBrace]).is_some() {
-            self.block()
-        } else {
-            self.expr_stmt()
+        match self.match_next(&[Print, If, LeftBrace, While]) {
+            Some(Print) => self.print_stmt(),
+            Some(If) => self.if_stmt(),
+            Some(LeftBrace) => self.block(),
+            Some(While) => self.while_stmt(),
+            _ => self.expr_stmt(),
         }
     }
 
-    // ifStmt → if "(" expr ")" statement ("else" statement)?
+    // ifStmt → if "(" expression ")" statement ("else" statement)?
     fn if_stmt(&mut self) -> Result<Stmt, ParseError> {
         // "if" already consumed
         self.consume(&LeftParen, "Expect '(' after 'if'.")?;
@@ -238,12 +236,24 @@ impl<'a> ParserState<'a> {
         Ok(Stmt::If { condition, then_branch: if_branch, else_branch })
     }
 
-    // printStmt → "print" expr ";"
+    // printStmt → "print" expression ";"
     fn print_stmt(&mut self) -> Result<Stmt, ParseError> {
         // "print" is already consumed
         let expr = self.expression()?;
         self.consume(&Semicolon, "Expect ';' after expression.")?;
         Ok(Stmt::Print(expr))
+    }
+
+    // whileStmt → "while" "(" expression ")" stmt
+    fn while_stmt(&mut self) -> Result<Stmt, ParseError> {
+        // "while" already consumed
+
+        self.consume(&LeftParen, "Expect '(' after 'while'.")?;
+        let condition = self.expression()?;
+        self.consume(&RightParen, "Expect ')' after while condition.")?;
+        let body = self.statement()?;
+
+        Ok(Stmt::While { condition, body: Box::new(body) })
     }
 
     // block → "{" (declaration)* "}"
@@ -258,7 +268,7 @@ impl<'a> ParserState<'a> {
         Ok(Stmt::Block(stmts))
     }
 
-    // exprStmt → expr ";"
+    // exprStmt → expression ";"
     fn expr_stmt(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.expression()?;
         self.consume(&Semicolon, "Expect ';' after expression.")?;
