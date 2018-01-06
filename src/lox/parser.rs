@@ -205,15 +205,53 @@ impl<'a> ParserState<'a> {
     }
 
 
-    // statement → exprStmt | ifStmt | printStmt | whileStmt | block
+    // statement → exprStmt | forStmt | ifStmt | printStmt | whileStmt | block
     fn statement(&mut self) -> Result<Stmt, ParseError> {
-        match self.match_next(&[Print, If, LeftBrace, While]) {
+        match self.match_next(&[Print, For, If, LeftBrace, While]) {
             Some(Print) => self.print_stmt(),
+            Some(For) => self.for_stmt(),
             Some(If) => self.if_stmt(),
             Some(LeftBrace) => self.block(),
             Some(While) => self.while_stmt(),
             _ => self.expr_stmt(),
         }
+    }
+
+    // forStmt → "for" "(" (varDecl | exprStmt | ";") expression? ";" expression? ")" statement
+    fn for_stmt(&mut self) -> Result<Stmt, ParseError> {
+        // "for" already consumed
+
+        self.consume(&LeftParen, "Expect '(' after 'for'.")?;
+        let initializer = match self.match_next(&[Semicolon, Var]) {
+            Some(Semicolon) => None,
+            Some(Var) => Some(self.var_declaration()?),
+            _ => Some(self.expr_stmt()?),
+        };
+
+        let condition = if let Some(&Semicolon) = self.peek() {
+            Literal(Value::Boolean(true))
+        } else {
+            self.expression()?
+        };
+        self.consume(&Semicolon, "Expect ';' after for loop condition.")?;
+
+        let increment = if let Some(&RightParen) = self.peek() {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+        self.consume(&RightParen, "Expect ')' after for clauses.")?;
+
+        let mut body = self.statement()?;
+        if let Some(increment) = increment {
+            body = Stmt::Block(vec![body, Stmt::Expression(increment)]);
+        }
+
+        body = Stmt::While { condition, body: Box::new(body) };
+
+        if let Some(initializer) = initializer { body = Stmt::Block(vec![initializer, body]) }
+
+        Ok(body)
     }
 
     // ifStmt → if "(" expression ")" statement ("else" statement)?
