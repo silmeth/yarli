@@ -1,4 +1,6 @@
+use std::iter::Peekable;
 use std::rc::Rc;
+use std::vec::IntoIter;
 
 use super::Lox;
 use super::token::{TokenContext, Token};
@@ -18,16 +20,14 @@ pub fn parse(tokens: Vec<TokenContext>, lox: &mut Lox) -> Vec<Stmt> {
 }
 
 struct ParserState<'a> {
-    tokens: Vec<TokenContext>,
-    current: usize,
+    tokens: Peekable<IntoIter<TokenContext>>,
     lox: &'a mut Lox,
 }
 
 impl<'a> ParserState<'a> {
     fn new(tokens: Vec<TokenContext>, lox: &mut Lox) -> ParserState {
         ParserState {
-            tokens,
-            current: 0,
+            tokens: tokens.into_iter().peekable(),
             lox,
         }
     }
@@ -325,21 +325,16 @@ impl<'a> ParserState<'a> {
     }
 
     fn advance(&mut self) -> Option<Token> {
-        use std::mem;
-
-        match self.tokens.get_mut(self.current) {
+        match self.tokens.peek() {
             // never consume EOF
-            None | Some(&mut TokenContext { token: Eof, .. }) => None,
-            Some(token) => {
-                self.current += 1;
-                Some(mem::replace(&mut token.token, Nil))
-            }
+            None | Some(&TokenContext { token: Eof, .. }) => None,
+            Some(_) => self.tokens.next().map(|ctx| ctx.token)
         }
     }
 
     #[inline]
-    fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.current).map(|ctx| &ctx.token)
+    fn peek(&mut self) -> Option<&Token> {
+        self.tokens.peek().map(|ctx| &ctx.token)
     }
 
     #[inline]
@@ -366,20 +361,27 @@ impl<'a> ParserState<'a> {
     }
 
     fn error(&mut self, msg: &str) -> ParseError {
-        use std::cmp::min;
-        self.lox.error_at_token(&self.tokens[min(self.tokens.len(), self.current)], msg);
+        self.lox.error_at_token(self.tokens.peek().unwrap(), msg);
         ParseError
     }
 
     fn synchronize(&mut self) {
-        if let Some((idx, _)) = self.tokens.iter()
-            .enumerate()
-            .skip(self.current)
-            .find(|&(_, t)|
-                [Class, Fun, Var, For, If, While, Print, Return].contains(&t.token)) {
-            self.current = idx;
-        } else {
-            self.current = self.tokens.len() - 1;
+        fn peek_new_stmt_or_eof(tokens: &mut Peekable<IntoIter<TokenContext>>) -> bool {
+            match tokens.peek() {
+                Some(ctx) if [Class, Fun, Var, For, If, While, Print, Return, Eof].contains(&ctx.token) => true,
+                Some(_) => false,
+                _ => unreachable!("End of iterator without encountering Eof."),
+            }
+        }
+
+        if peek_new_stmt_or_eof(&mut self.tokens) {
+            return;
+        }
+
+        while let Some(_) = self.tokens.next() {
+            if peek_new_stmt_or_eof(&mut self.tokens) {
+                break;
+            }
         }
     }
 }
