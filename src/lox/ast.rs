@@ -8,6 +8,7 @@ pub enum Expr {
     Variable(String),
     Assign { name: String, value: Box<Expr> },
     Logic { lh: Box<Expr>, op: LogicOperator, rh: Box<Expr> },
+    Call { callee: Box<Expr>, args: Vec<Expr> },
 }
 
 pub enum UnOperator {
@@ -68,14 +69,31 @@ impl fmt::Display for LogicOperator {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+use lox::interpreter::Callable;
+#[derive(Clone)]
 pub enum Value {
     String(Rc<str>),
     Number(f64),
     Boolean(bool),
     Nil,
+    Function(Rc<Callable>),
     // Object(Rc<RefCell<ObjectStruct>>),
-    // Function(),
+}
+
+impl PartialEq<Value> for Value {
+    fn eq(&self, other: &Value) -> bool {
+        use std::ptr;
+        use std::borrow::Borrow;
+
+        match (self, other) {
+            (&Value::String(ref lh), &Value::String(ref rh)) => lh == rh,
+            (&Value::Number(lh), &Value::Number(rh)) => lh == rh,
+            (&Value::Boolean(lh), &Value::Boolean(rh)) => lh == rh,
+            (&Value::Nil, &Value::Nil) => true,
+            (&Value::Function(ref lh), &Value::Function(ref rh)) => ptr::eq::<Callable>(lh.borrow(), rh.borrow()),
+            _ => false,
+        }
+    }
 }
 
 impl Value {
@@ -85,6 +103,7 @@ impl Value {
             Value::Number(_) => "number",
             Value::Boolean(_) => "boolean",
             Value::Nil => "nil",
+            Value::Function(_) => "function",
         }
     }
 }
@@ -96,6 +115,7 @@ impl fmt::Display for Value {
             Value::Number(ref num) => write!(f, "{}", num),
             Value::Boolean(ref b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
+            Value::Function(ref func) => write!(f, "<fn {}>", func.name())
             // Value::Object() => write!(f, "object"),
         }
     }
@@ -122,12 +142,18 @@ pub mod printer {
                 Value::Number(num) => format!("{}", num),
                 Value::String(ref s) => (**s).to_owned(),
                 Value::Boolean(b) => format!("{}", b),
+                Value::Function(ref func) => format!("func {}", func.name()),
                 // ref obj @ Value::Object() => format!("{:?}", obj),
             },
             Unary { ref op, ref rh } => parenthesize(&format!("{}", op), &[rh]),
             Variable(ref s) => format!("var {}", s),
             Assign { ref name, ref value } => format!("assignment {} = {}", name, print_ast(value)),
             Logic { ref lh, ref op, ref rh } => parenthesize(&format!("{}", op), &[lh, rh]),
+            Call { ref callee, ref args } => format!("call {}({})",
+                                                     print_ast(callee),
+                                                     args.iter().map(|it| print_ast(it))
+                                                         .collect::<Vec<_>>()
+                                                         .join(", "))
         }
     }
 

@@ -59,7 +59,7 @@ impl<'a> ParserState<'a> {
 
         while self.match_next(&[Or]).is_some() {
             let rh = self.and()?;
-            expr = Expr::Logic { lh: Box::new(expr), op: LogicOperator::Or, rh: Box::new(rh) };
+            expr = Logic { lh: Box::new(expr), op: LogicOperator::Or, rh: Box::new(rh) };
         }
 
         Ok(expr)
@@ -71,7 +71,7 @@ impl<'a> ParserState<'a> {
 
         while self.match_next(&[And]).is_some() {
             let rh = self.equality()?;
-            expr = Expr::Logic { lh: Box::new(expr), op: LogicOperator::And, rh: Box::new(rh) };
+            expr = Logic { lh: Box::new(expr), op: LogicOperator::And, rh: Box::new(rh) };
         }
 
         Ok(expr)
@@ -139,15 +139,50 @@ impl<'a> ParserState<'a> {
         Ok(res)
     }
 
-    // unary → (("!" | "-") unary) | primary
+    // unary → (("!" | "-") unary) | call
     fn unary(&mut self) -> Result<Expr, ParseError> {
         if let Some(op_token) = self.match_next(&[Bang, Minus]) {
             let rh = self.unary()?;
             let op = if op_token == Bang { UnOperator::Not } else { UnOperator::Minus };
             Ok(Unary { op, rh: Box::new(rh) })
         } else {
-            self.primary()
+            self.call()
         }
+    }
+
+    // call → primary ("(" arguments? ")")*
+    // arguments → expression ("," expression)*
+    fn call(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.primary()?;
+
+        while self.match_next(&[LeftParen]).is_some() {
+            expr = self.finish_call(expr)?;
+        }
+
+        Ok(expr)
+    }
+
+    #[inline]
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParseError> {
+        let mut args = Vec::new();
+
+        if !self.match_next(&[RightParen]).is_some() {
+            loop {
+                if args.len() >= 8 {
+                    self.error("Cannot have more than 8 arguments.");
+                }
+
+                args.push(self.expression()?);
+
+                if !self.match_next(&[Comma]).is_some() {
+                    break;
+                }
+            }
+
+            self.consume(&RightParen, "Expect ')' after arguments.")?;
+        }
+
+        Ok(Call { callee: Box::new(callee), args })
     }
 
     // primary → NUMBER | STRING | "false" | "true" | "nil" | identifier | "(" expr ")"

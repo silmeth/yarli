@@ -5,3 +5,4 @@ authors = ["silmeth <sth.jaworski@gmail.com>"]
 
 [dependencies]
 failure = "^0.1.1"
+chrono = "^0.4.0"

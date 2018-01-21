@@ -1,4 +1,7 @@
+extern crate chrono;
+
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::rc::Rc;
 
 use super::ast::{Expr, Value, UnOperator, BiOperator, LogicOperator, Stmt};
@@ -8,16 +11,29 @@ use super::Lox;
 type EvaluateResult = Result<Value, RuntimeError>;
 type InterpretResult = Result<(), EarlyExit>;
 
-
 pub struct Interpreter {
     environment: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter {
-            environment: Environment::new_global(),
-        }
+        use self::chrono::Utc;
+
+        let mut environment = Environment::new_global();
+
+        let clock = Native {
+            name: Rc::from("clock"),
+            callable: |_, _| {
+                let time = Utc::now();
+                let millis = time.timestamp() * 1000 + i64::from(time.timestamp_subsec_millis());
+
+                Err(EarlyExit::Return(Value::Number(millis as f64 / 1000.0)))
+            },
+            arity: 0,
+        };
+        environment.define((*clock.name).to_owned(), Value::Function(Rc::new(clock)));
+
+        Interpreter { environment }
     }
 
     pub fn interpret(&mut self, stmts: Vec<Stmt>, lox: &mut Lox) {
@@ -77,7 +93,24 @@ impl Interpreter {
                     LogicOperator::And if !is_truthy(&lh) => lh,
                     _ => self.evaluate(&*rh)?,
                 }
-            }
+            },
+            Call { ref callee, ref args } => {
+                let callee = self.evaluate(callee)?;
+                let args = args.iter().map(|arg| self.evaluate(arg)).collect::<Result<Vec<_>, _>>()?;
+
+                let function = callee.into_callable()?;
+                let arity = function.arity();
+
+                if args.len() != (arity as usize) {
+                    return Err(RuntimeError::WrongArity { expected: arity, got: args.len() })
+                }
+
+                match function.call(self, &args) {
+                    Ok(()) => Value::Nil,
+                    Err(EarlyExit::Return(val)) => val,
+                    Err(EarlyExit::Error(err)) => return Err(err),
+                }
+            },
         };
 
         Ok(res)
@@ -212,12 +245,72 @@ fn expect_number(val: &Value) -> Result<f64, RuntimeError> {
     }
 }
 
+pub trait Callable {
+    fn arity(&self) -> u8;
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> InterpretResult;
+    fn name(&self) -> Rc<str>;
+}
+
+impl <D, C: Callable + ?Sized> Callable for D where D: Deref<Target = C> {
+    fn arity(&self) -> u8 {
+        self.deref().arity()
+    }
+
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> InterpretResult {
+        self.deref().call(interpreter, args)
+    }
+
+    fn name(&self) -> Rc<str> {
+        self.deref().name()
+    }
+}
+
+trait IntoCallable {
+    type C: Callable;
+    fn into_callable(self) -> Result<Self::C, RuntimeError>;
+}
+
+impl IntoCallable for Value {
+    type C = Rc<Callable>;
+
+    fn into_callable(self) -> Result<Self::C, RuntimeError> {
+        match self {
+            Value::Function(f) => Ok(f),
+            _ => Err(RuntimeError::not_callable(&self))
+        }
+    }
+}
+
+struct Native<F> where for<'a, 'b> F: Fn(&'a mut Interpreter, &'b [Value]) -> InterpretResult {
+    name: Rc<str>,
+    arity: u8,
+    callable: F,
+}
+
+impl <F> Callable for Native<F> where for<'a, 'b> F: Fn(&'a mut Interpreter, &'b [Value]) -> InterpretResult {
+    fn arity(&self) -> u8 {
+        self.arity
+    }
+
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> InterpretResult {
+        (self.callable)(interpreter, args)
+    }
+
+    fn name(&self) -> Rc<str> {
+        Rc::clone(&self.name)
+    }
+}
+
 #[derive(Debug, Fail)]
 pub enum RuntimeError {
     #[fail(display = "Type error: expected {} value, got {} ({}).", expected, value, type_name)]
     TypeError { expected: &'static str, type_name: &'static str, value: String },
     #[fail(display = "Undefined variable {}.", name)]
     UndefinedError { name: String },
+    #[fail(display = "Can only call callable objects. Got not callable: {}.", value)]
+    NotCallable { value: String },
+    #[fail(display = "Expected {} arguments but got {}.", expected, got)]
+    WrongArity { expected: u8, got: usize },
 }
 
 impl RuntimeError {
@@ -225,6 +318,12 @@ impl RuntimeError {
         RuntimeError::TypeError {
             expected,
             type_name: value.type_name(),
+            value: value.to_string(),
+        }
+    }
+
+    fn not_callable(value: &Value) -> RuntimeError {
+        RuntimeError::NotCallable {
             value: value.to_string(),
         }
     }
