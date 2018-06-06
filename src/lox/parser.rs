@@ -166,7 +166,7 @@ impl<'a> ParserState<'a> {
     fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParseError> {
         let mut args = Vec::new();
 
-        if !self.match_next(&[RightParen]).is_some() {
+        if self.match_next(&[RightParen]).is_none() {
             loop {
                 if args.len() >= 8 {
                     self.error("Cannot have more than 8 arguments.");
@@ -174,7 +174,7 @@ impl<'a> ParserState<'a> {
 
                 args.push(self.expression()?);
 
-                if !self.match_next(&[Comma]).is_some() {
+                if self.match_next(&[Comma]).is_none() {
                     break;
                 }
             }
@@ -210,18 +210,48 @@ impl<'a> ParserState<'a> {
         Ok(res)
     }
 
-    // declaration → varDecl | statement
+    // declaration → funDecl | varDecl | statement
     fn declaration(&mut self) -> Result<Stmt, ParseError> {
-        let res = if self.match_next(&[Var]).is_some() {
-            self.var_declaration()
-        } else {
-            self.statement()
+        let res = match self.match_next(&[Var, Fun]) {
+            Some(Fun) => self.function("function"),
+            Some(Var) => self.var_declaration(),
+            _ => self.statement(),
         };
 
         res.map_err(|e| {
             self.synchronize();
             e
         })
+    }
+
+    // funDecl → "fun" function
+    // function → IDENTIFIER "(" parameters? ")" block
+    fn function(&mut self, kind: &'static str) -> Result<Stmt, ParseError> {
+        // "fun" already consumed
+        let name = self.consume_identifier(&format!("Expect {} name.", kind))?;
+
+        self.consume(&LeftParen, &format!("Expect '(' after {}.", kind))?;
+
+        let mut parameters = Vec::new();
+        if self.match_next(&[RightParen]).is_none() {
+            loop {
+                if parameters.len() >= 8 {
+                    self.error("Cannot have more than 8 parameters.");
+                }
+
+                parameters.push(self.consume_identifier("")?);
+
+                if self.match_next(&[Comma]).is_none() {
+                    break;
+                }
+            }
+
+            self.consume(&RightParen, "Expect ')' after parameters.")?;
+        }
+
+        self.consume(&LeftBrace, &format!("Expect '{{' before {} body.", kind))?;
+        let body = self.block()?;
+        Ok(Stmt::Function { name, parameters, body })
     }
 
     // varDecl → "var" identifier ("=" expression)? ";"
@@ -246,7 +276,7 @@ impl<'a> ParserState<'a> {
             Some(Print) => self.print_stmt(),
             Some(For) => self.for_stmt(),
             Some(If) => self.if_stmt(),
-            Some(LeftBrace) => self.block(),
+            Some(LeftBrace) => Ok(Stmt::Block(self.block()?)),
             Some(While) => self.while_stmt(),
             _ => self.expr_stmt(),
         }
@@ -330,7 +360,7 @@ impl<'a> ParserState<'a> {
     }
 
     // block → "{" (declaration)* "}"
-    fn block(&mut self) -> Result<Stmt, ParseError> {
+    fn block(&mut self) -> Result<Vec<Stmt>, ParseError> {
         let mut stmts = Vec::new();
 
         while self.peek() != Some(&RightBrace) && self.peek() != None {
@@ -338,7 +368,7 @@ impl<'a> ParserState<'a> {
         }
 
         self.consume(&RightBrace, "Expect '}' after block.")?;
-        Ok(Stmt::Block(stmts))
+        Ok(stmts)
     }
 
     // exprStmt → expression ";"
@@ -401,22 +431,14 @@ impl<'a> ParserState<'a> {
     }
 
     fn synchronize(&mut self) {
-        fn peek_new_stmt_or_eof(tokens: &mut Peekable<IntoIter<TokenContext>>) -> bool {
-            match tokens.peek() {
-                Some(ctx) if [Class, Fun, Var, For, If, While, Print, Return, Eof].contains(&ctx.token) => true,
-                Some(_) => false,
-                _ => unreachable!("End of iterator without encountering Eof."),
+        loop {
+            match self.tokens.peek() {
+                Some(ctx) if [Class, Fun, Var, For, If, While, Print, Return, Eof].contains(&ctx.token) => break,
+                Some(_) => {}
+                _ => panic!("End of iterator without encountering Eof."),
             }
-        }
 
-        if peek_new_stmt_or_eof(&mut self.tokens) {
-            return;
-        }
-
-        while let Some(_) = self.tokens.next() {
-            if peek_new_stmt_or_eof(&mut self.tokens) {
-                break;
-            }
+            let _ = self.tokens.next();
         }
     }
 }

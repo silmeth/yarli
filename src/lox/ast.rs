@@ -1,6 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 
+#[derive(Clone)]
 pub enum Expr {
     Binary { lh: Box<Expr>, op: BiOperator, rh: Box<Expr> },
     Literal(Value),
@@ -11,6 +12,18 @@ pub enum Expr {
     Call { callee: Box<Expr>, args: Vec<Expr> },
 }
 
+#[derive(Clone)]
+pub enum Stmt {
+    Block(Vec<Stmt>),
+    Expression(Expr),
+    Function { name: String, parameters: Vec<String>, body: Vec<Stmt> },
+    If { condition: Expr, then_branch: Box<Stmt>, else_branch: Option<Box<Stmt>> },
+    Print(Expr),
+    Var { name: String, initializer: Expr },
+    While { condition: Expr, body: Box<Stmt> },
+}
+
+#[derive(Copy, Clone)]
 pub enum UnOperator {
     Not,
     Minus,
@@ -25,6 +38,7 @@ impl fmt::Display for UnOperator {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum BiOperator {
     Plus,
     Minus,
@@ -55,6 +69,7 @@ impl fmt::Display for BiOperator {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum LogicOperator {
     Or,
     And,
@@ -70,6 +85,7 @@ impl fmt::Display for LogicOperator {
 }
 
 use lox::interpreter::Callable;
+
 #[derive(Clone)]
 pub enum Value {
     String(Rc<str>),
@@ -119,15 +135,6 @@ impl fmt::Display for Value {
             // Value::Object() => write!(f, "object"),
         }
     }
-}
-
-pub enum Stmt {
-    Expression(Expr),
-    Print(Expr),
-    Var { name: String, initializer: Expr },
-    Block(Vec<Stmt>),
-    If { condition: Expr, then_branch: Box<Stmt>, else_branch: Option<Box<Stmt>> },
-    While { condition: Expr, body: Box<Stmt> },
 }
 
 pub mod printer {

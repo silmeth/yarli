@@ -3,6 +3,7 @@ extern crate chrono;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use super::ast::{Expr, Value, UnOperator, BiOperator, LogicOperator, Stmt};
 use super::ast::Expr::*;
@@ -12,14 +13,15 @@ type EvaluateResult = Result<Value, RuntimeError>;
 type InterpretResult = Result<(), EarlyExit>;
 
 pub struct Interpreter {
-    environment: Environment,
+    globals: Rc<RefCell<Environment>>,
+    environment: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
         use self::chrono::Utc;
 
-        let mut environment = Environment::new_global();
+        let globals = Rc::new(RefCell::new(Environment::new_global()));
 
         let clock = Native {
             name: Rc::from("clock"),
@@ -31,9 +33,10 @@ impl Interpreter {
             },
             arity: 0,
         };
-        environment.define((*clock.name).to_owned(), Value::Function(Rc::new(clock)));
+        globals.borrow_mut().define((*clock.name).to_owned(), Value::Function(Rc::new(clock)));
+        let environment = Rc::clone(&globals);
 
-        Interpreter { environment }
+        Interpreter { globals, environment }
     }
 
     pub fn interpret(&mut self, stmts: Vec<Stmt>, lox: &mut Lox) {
@@ -78,11 +81,11 @@ impl Interpreter {
                 }
             }
             Variable(ref s) => {
-                self.environment.get(s)?
+                self.environment.borrow().get(s)?
             }
             Assign { ref name, ref value } => {
                 let value = self.evaluate(&*value)?;
-                self.environment.assign(name.to_owned(), value.clone())?;
+                self.environment.borrow_mut().assign(name.to_owned(), value.clone())?;
                 value
             }
             Logic { ref lh, ref op, ref rh } => {
@@ -122,9 +125,12 @@ impl Interpreter {
             Stmt::Print(ref expr) => println!("{}", self.evaluate(expr)?),
             Stmt::Var { ref name, ref initializer } => {
                 let value = self.evaluate(initializer)?;
-                self.environment.define(name.to_owned(), value);
+                self.environment.borrow_mut().define(name.to_owned(), value);
             }
-            Stmt::Block(ref stmts) => self.execute_block(stmts)?,
+            Stmt::Block(ref stmts) => {
+                let local = Rc::new(RefCell::new(Environment::new_local(Rc::clone(&self.environment))));
+                self.execute_block(stmts, local)?
+            },
             Stmt::If { ref condition, ref then_branch, ref else_branch } => {
                 if is_truthy(&self.evaluate(condition)?) {
                     self.interpret_stmt(&*then_branch)?;
@@ -137,13 +143,23 @@ impl Interpreter {
                     self.interpret_stmt(&*body)?;
                 }
             }
+            Stmt::Function { ref name, ref parameters, ref body } => {
+                let function = Value::Function(Rc::new(LoxFunction {
+                    name: Rc::from(name.to_owned()),
+                    parameters: parameters.iter().map(|it| { it.to_owned() }).collect(),
+                    stmts: body.to_vec()
+                }));
+
+                self.environment.borrow_mut().define(name.to_owned(), function);
+            }
         }
 
         Ok(())
     }
 
-    fn execute_block(&mut self, stmts: &[Stmt]) -> InterpretResult {
-        self.environment.push_new_local();
+    fn execute_block(&mut self, stmts: &[Stmt], environment: Rc<RefCell<Environment>>) -> InterpretResult {
+        use std::mem;
+        let previous = mem::replace(&mut self.environment, environment);
 
         let mut res = Ok(());
         for stmt in stmts {
@@ -154,8 +170,7 @@ impl Interpreter {
             }
         }
 
-        // We are at the end of a block, there must be a parent environment.
-        self.environment.pop_local().unwrap();
+        self.environment = previous;
 
         res
     }
@@ -163,10 +178,7 @@ impl Interpreter {
 
 struct Environment {
     values: HashMap<String, Value>,
-    // Perhaps having a Option<&mut> ref would be better here,
-    // then environment would need to be decoupled from interpreter and always passed by ref.
-    // This solution is more comparable to jlox though.
-    enclosing: Option<Box<Environment>>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Environment {
@@ -177,25 +189,10 @@ impl Environment {
         }
     }
 
-    fn push_new_local(&mut self) {
-        use std::mem::replace;
-
-        let parent_values = replace(&mut self.values, HashMap::new());
-        let parent_enclosing = self.enclosing.take();
-
-        self.enclosing = Some(Box::new(Environment {
-            values: parent_values,
-            enclosing: parent_enclosing,
-        }))
-    }
-
-    fn pop_local(&mut self) -> Option<()> {
-        match self.enclosing.take() {
-            Some(parent) => {
-                *self = *parent;
-                Some(())
-            }
-            _ => None
+    fn new_local(parent: Rc<RefCell<Environment>>) -> Environment {
+        Environment {
+            values: HashMap::new(),
+            enclosing: Some(parent),
         }
     }
 
@@ -210,7 +207,7 @@ impl Environment {
         } else {
             match self.enclosing {
                 Some(ref mut enclosing) => {
-                    enclosing.assign(name, value)?;
+                    enclosing.borrow_mut().assign(name, value)?;
                     Ok(())
                 }
                 None => Err(RuntimeError::UndefinedError { name: name.to_owned() })
@@ -222,7 +219,7 @@ impl Environment {
         match self.values.get(name) {
             Some(val) => Ok(val.clone()),
             None => match self.enclosing {
-                Some(ref enclosing) => Ok(enclosing.get(name)?),
+                Some(ref enclosing) => Ok(enclosing.borrow().get(name)?),
                 None => Err(RuntimeError::UndefinedError { name: name.to_owned() })
             },
         }
@@ -296,6 +293,31 @@ impl <F> Callable for Native<F> where for<'a, 'b> F: Fn(&'a mut Interpreter, &'b
         (self.callable)(interpreter, args)
     }
 
+    fn name(&self) -> Rc<str> {
+        Rc::clone(&self.name)
+    }
+}
+
+struct LoxFunction {
+    name: Rc<str>,
+    parameters: Vec<String>,
+    stmts: Vec<Stmt>,
+}
+
+impl Callable for LoxFunction {
+    fn arity(&self) -> u8 {
+        self.parameters.len() as u8
+    }
+
+    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> InterpretResult {
+        let mut environment = Environment::new_local(Rc::clone(&interpreter.globals));
+
+        for (param, arg) in self.parameters.iter().zip(args) {
+            environment.define(param.to_owned(), arg.clone());
+        }
+
+        interpreter.execute_block(&*self.stmts, Rc::new(RefCell::new(environment)))
+    }
     fn name(&self) -> Rc<str> {
         Rc::clone(&self.name)
     }
