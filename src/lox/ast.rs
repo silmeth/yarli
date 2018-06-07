@@ -19,6 +19,7 @@ pub enum Stmt {
     Function { name: String, parameters: Vec<String>, body: Vec<Stmt> },
     If { condition: Expr, then_branch: Box<Stmt>, else_branch: Option<Box<Stmt>> },
     Print(Expr),
+    Return(Expr),
     Var { name: String, initializer: Expr },
     While { condition: Expr, body: Box<Stmt> },
 }

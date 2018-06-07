@@ -239,7 +239,7 @@ impl<'a> ParserState<'a> {
                     self.error("Cannot have more than 8 parameters.");
                 }
 
-                parameters.push(self.consume_identifier("")?);
+                parameters.push(self.consume_identifier("Expect parameter name.")?);
 
                 if self.match_next(&[Comma]).is_none() {
                     break;
@@ -270,13 +270,14 @@ impl<'a> ParserState<'a> {
     }
 
 
-    // statement → exprStmt | forStmt | ifStmt | printStmt | whileStmt | block
+    // statement → exprStmt | forStmt | ifStmt | printStmt | returnStmt | whileStmt | block
     fn statement(&mut self) -> Result<Stmt, ParseError> {
-        match self.match_next(&[Print, For, If, LeftBrace, While]) {
+        match self.match_next(&[Print, For, If, LeftBrace, Return, While]) {
             Some(Print) => self.print_stmt(),
             Some(For) => self.for_stmt(),
             Some(If) => self.if_stmt(),
             Some(LeftBrace) => Ok(Stmt::Block(self.block()?)),
+            Some(Return) => self.return_stmt(),
             Some(While) => self.while_stmt(),
             _ => self.expr_stmt(),
         }
@@ -345,6 +346,19 @@ impl<'a> ParserState<'a> {
         let expr = self.expression()?;
         self.consume(&Semicolon, "Expect ';' after expression.")?;
         Ok(Stmt::Print(expr))
+    }
+
+    // returnStmt → "return" expression? ";"
+    fn return_stmt(&mut self) -> Result<Stmt, ParseError> {
+        // "return" is already consumed
+        let val = if Some(&Semicolon) == self.peek() {
+            Literal(Value::Nil)
+        } else {
+            self.expression()?
+        };
+
+        self.consume(&Semicolon, "Expect ';' after return value.")?;
+        Ok(Stmt::Return(val))
     }
 
     // whileStmt → "while" "(" expression ")" stmt

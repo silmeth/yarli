@@ -11,17 +11,18 @@ use super::Lox;
 
 type EvaluateResult = Result<Value, RuntimeError>;
 type InterpretResult = Result<(), EarlyExit>;
+type EnvironmentCell = Rc<RefCell<Environment>>;
 
 pub struct Interpreter {
-    globals: Rc<RefCell<Environment>>,
-    environment: Rc<RefCell<Environment>>,
+    globals: EnvironmentCell,
+    environment: EnvironmentCell,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
         use self::chrono::Utc;
 
-        let globals = Rc::new(RefCell::new(Environment::new_global()));
+        let globals = Environment::new_global().into_cell();
 
         let clock = Native {
             name: Rc::from("clock"),
@@ -128,9 +129,9 @@ impl Interpreter {
                 self.environment.borrow_mut().define(name.to_owned(), value);
             }
             Stmt::Block(ref stmts) => {
-                let local = Rc::new(RefCell::new(Environment::new_local(Rc::clone(&self.environment))));
+                let local = Environment::new_local(Rc::clone(&self.environment)).into_cell();
                 self.execute_block(stmts, local)?
-            },
+            }
             Stmt::If { ref condition, ref then_branch, ref else_branch } => {
                 if is_truthy(&self.evaluate(condition)?) {
                     self.interpret_stmt(&*then_branch)?;
@@ -138,6 +139,7 @@ impl Interpreter {
                     self.interpret_stmt(&*else_branch)?;
                 }
             }
+            Stmt::Return(ref expr) => return Err(EarlyExit::Return(self.evaluate(expr)?)),
             Stmt::While { ref condition, ref body } => {
                 while is_truthy(&self.evaluate(condition)?) {
                     self.interpret_stmt(&*body)?;
@@ -147,7 +149,8 @@ impl Interpreter {
                 let function = Value::Function(Rc::new(LoxFunction {
                     name: Rc::from(name.to_owned()),
                     parameters: parameters.iter().map(|it| { it.to_owned() }).collect(),
-                    stmts: body.to_vec()
+                    stmts: body.to_vec(),
+                    closure: Rc::clone(&self.environment),
                 }));
 
                 self.environment.borrow_mut().define(name.to_owned(), function);
@@ -157,7 +160,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute_block(&mut self, stmts: &[Stmt], environment: Rc<RefCell<Environment>>) -> InterpretResult {
+    fn execute_block(&mut self, stmts: &[Stmt], environment: EnvironmentCell) -> InterpretResult {
         use std::mem;
         let previous = mem::replace(&mut self.environment, environment);
 
@@ -178,7 +181,7 @@ impl Interpreter {
 
 struct Environment {
     values: HashMap<String, Value>,
-    enclosing: Option<Rc<RefCell<Environment>>>,
+    enclosing: Option<EnvironmentCell>,
 }
 
 impl Environment {
@@ -189,7 +192,7 @@ impl Environment {
         }
     }
 
-    fn new_local(parent: Rc<RefCell<Environment>>) -> Environment {
+    fn new_local(parent: EnvironmentCell) -> Environment {
         Environment {
             values: HashMap::new(),
             enclosing: Some(parent),
@@ -223,6 +226,10 @@ impl Environment {
                 None => Err(RuntimeError::UndefinedError { name: name.to_owned() })
             },
         }
+    }
+
+    fn into_cell(self) -> EnvironmentCell {
+        Rc::new(RefCell::new(self))
     }
 }
 
@@ -302,6 +309,7 @@ struct LoxFunction {
     name: Rc<str>,
     parameters: Vec<String>,
     stmts: Vec<Stmt>,
+    closure: EnvironmentCell
 }
 
 impl Callable for LoxFunction {
@@ -310,13 +318,13 @@ impl Callable for LoxFunction {
     }
 
     fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> InterpretResult {
-        let mut environment = Environment::new_local(Rc::clone(&interpreter.globals));
+        let mut environment = Environment::new_local(Rc::clone(&self.closure));
 
         for (param, arg) in self.parameters.iter().zip(args) {
             environment.define(param.to_owned(), arg.clone());
         }
 
-        interpreter.execute_block(&*self.stmts, Rc::new(RefCell::new(environment)))
+        interpreter.execute_block(&*self.stmts, environment.into_cell())
     }
     fn name(&self) -> Rc<str> {
         Rc::clone(&self.name)
