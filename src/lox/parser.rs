@@ -194,7 +194,7 @@ impl<'a> ParserState<'a> {
                 StringLit(s) => Literal(Value::String(Rc::from(s))),
                 Number(num) => Literal(Value::Number(num)),
                 Nil => Literal(Value::Nil),
-                Identifier(s) => Variable(s),
+                Identifier(s) => Variable(Rc::from(s)),
                 LeftParen => {
                     let expr = self.expression()?;
                     self.consume(&RightParen, "Expect ')' after grouped expression.")?;
@@ -228,7 +228,7 @@ impl<'a> ParserState<'a> {
     // function → IDENTIFIER "(" parameters? ")" block
     fn function(&mut self, kind: &'static str) -> Result<Stmt, ParseError> {
         // "fun" already consumed
-        let name = self.consume_identifier(&format!("Expect {} name.", kind))?;
+        let name = Rc::from(self.consume_identifier(&format!("Expect {} name.", kind))?);
 
         self.consume(&LeftParen, &format!("Expect '(' after {}.", kind))?;
 
@@ -239,7 +239,7 @@ impl<'a> ParserState<'a> {
                     self.error("Cannot have more than 8 parameters.");
                 }
 
-                parameters.push(self.consume_identifier("Expect parameter name.")?);
+                parameters.push(Rc::from(self.consume_identifier("Expect parameter name.")?));
 
                 if self.match_next(&[Comma]).is_none() {
                     break;
@@ -257,7 +257,7 @@ impl<'a> ParserState<'a> {
     // varDecl → "var" identifier ("=" expression)? ";"
     fn var_declaration(&mut self) -> Result<Stmt, ParseError> {
         // "var" already consumed
-        let name = self.consume_identifier("Expect variable name.")?;
+        let name = Rc::from(self.consume_identifier("Expect variable name.")?);
 
         let initializer = match self.match_next(&[Equal]) {
             Some(_) => self.expression()?,

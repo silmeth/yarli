@@ -6,8 +6,8 @@ pub enum Expr {
     Binary { lh: Box<Expr>, op: BiOperator, rh: Box<Expr> },
     Literal(Value),
     Unary { op: UnOperator, rh: Box<Expr> },
-    Variable(String),
-    Assign { name: String, value: Box<Expr> },
+    Variable(Rc<str>),
+    Assign { name: Rc<str>, value: Box<Expr> },
     Logic { lh: Box<Expr>, op: LogicOperator, rh: Box<Expr> },
     Call { callee: Box<Expr>, args: Vec<Expr> },
 }
@@ -16,11 +16,11 @@ pub enum Expr {
 pub enum Stmt {
     Block(Vec<Stmt>),
     Expression(Expr),
-    Function { name: String, parameters: Vec<String>, body: Vec<Stmt> },
+    Function { name: Rc<str>, parameters: Vec<Rc<str>>, body: Vec<Stmt> },
     If { condition: Expr, then_branch: Box<Stmt>, else_branch: Option<Box<Stmt>> },
     Print(Expr),
     Return(Expr),
-    Var { name: String, initializer: Expr },
+    Var { name: Rc<str>, initializer: Expr },
     While { condition: Expr, body: Box<Stmt> },
 }
 

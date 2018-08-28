@@ -34,7 +34,7 @@ impl Interpreter {
             },
             arity: 0,
         };
-        globals.borrow_mut().define((*clock.name).to_owned(), Value::Function(Rc::new(clock)));
+        globals.borrow_mut().define(Rc::clone(&clock.name), Value::Function(Rc::new(clock)));
         let environment = Rc::clone(&globals);
 
         Interpreter { globals, environment }
@@ -86,7 +86,7 @@ impl Interpreter {
             }
             Assign { ref name, ref value } => {
                 let value = self.evaluate(&*value)?;
-                self.environment.borrow_mut().assign(name.to_owned(), value.clone())?;
+                self.environment.borrow_mut().assign(Rc::clone(name), value.clone())?;
                 value
             }
             Logic { ref lh, ref op, ref rh } => {
@@ -147,8 +147,8 @@ impl Interpreter {
             }
             Stmt::Function { ref name, ref parameters, ref body } => {
                 let function = Value::Function(Rc::new(LoxFunction {
-                    name: Rc::from(name.to_owned()),
-                    parameters: parameters.iter().map(|it| { it.to_owned() }).collect(),
+                    name: Rc::clone(name),
+                    parameters: parameters.clone(),
                     stmts: body.to_vec(),
                     closure: Rc::clone(&self.environment),
                 }));
@@ -180,7 +180,7 @@ impl Interpreter {
 }
 
 struct Environment {
-    values: HashMap<String, Value>,
+    values: HashMap<Rc<str>, Value>,
     enclosing: Option<EnvironmentCell>,
 }
 
@@ -199,11 +199,11 @@ impl Environment {
         }
     }
 
-    fn define(&mut self, name: String, value: Value) {
+    fn define(&mut self, name: Rc<str>, value: Value) {
         let _ = self.values.insert(name, value);
     }
 
-    fn assign(&mut self, name: String, value: Value) -> Result<(), RuntimeError> {
+    fn assign(&mut self, name: Rc<str>, value: Value) -> Result<(), RuntimeError> {
         if self.values.contains_key(&name) {
             let _ = self.values.insert(name, value);
             Ok(())
@@ -213,7 +213,7 @@ impl Environment {
                     enclosing.borrow_mut().assign(name, value)?;
                     Ok(())
                 }
-                None => Err(RuntimeError::UndefinedError { name: name.to_owned() })
+                None => Err(RuntimeError::UndefinedError { name: name.deref().to_owned() })
             }
         }
     }
@@ -307,7 +307,7 @@ impl <F> Callable for Native<F> where for<'a, 'b> F: Fn(&'a mut Interpreter, &'b
 
 struct LoxFunction {
     name: Rc<str>,
-    parameters: Vec<String>,
+    parameters: Vec<Rc<str>>,
     stmts: Vec<Stmt>,
     closure: EnvironmentCell
 }
