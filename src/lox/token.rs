@@ -54,7 +54,7 @@ pub enum Token {
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Token::*;
-        match *self {
+        match self {
             LeftParen => write!(f, "("),
             RightParen => write!(f, ")"),
             LeftBrace => write!(f, "{{"),
@@ -74,9 +74,9 @@ impl fmt::Display for Token {
             GreaterEqual => write!(f, ">="),
             Less => write!(f, "<"),
             LessEqual => write!(f, "<="),
-            Identifier(ref s) => write!(f, "{}", s),
-            StringLit(ref s) => write!(f, "\"{}\"", s),
-            Number(ref num) => write!(f, "{}", num),
+            Identifier(s) => write!(f, "{}", s),
+            StringLit(s) => write!(f, "\"{}\"", s),
+            Number(num) => write!(f, "{}", num),
             And => write!(f, "and"),
             Class => write!(f, "class"),
             Else => write!(f, "else"),

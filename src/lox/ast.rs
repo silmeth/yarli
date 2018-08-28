@@ -32,7 +32,7 @@ pub enum UnOperator {
 
 impl fmt::Display for UnOperator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
+        match self {
             UnOperator::Not => write!(f, "!"),
             UnOperator::Minus => write!(f, "-"),
         }
@@ -55,7 +55,7 @@ pub enum BiOperator {
 
 impl fmt::Display for BiOperator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
+        match self {
             BiOperator::Plus => write!(f, "+"),
             BiOperator::Minus => write!(f, "-"),
             BiOperator::Mul => write!(f, "*"),
@@ -78,7 +78,7 @@ pub enum LogicOperator {
 
 impl fmt::Display for LogicOperator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
+        match self {
             LogicOperator::Or => write!(f, "or"),
             LogicOperator::And => write!(f, "and"),
         }
@@ -103,11 +103,11 @@ impl PartialEq<Value> for Value {
         use std::borrow::Borrow;
 
         match (self, other) {
-            (&Value::String(ref lh), &Value::String(ref rh)) => lh == rh,
-            (&Value::Number(lh), &Value::Number(rh)) => lh == rh,
-            (&Value::Boolean(lh), &Value::Boolean(rh)) => lh == rh,
-            (&Value::Nil, &Value::Nil) => true,
-            (&Value::Function(ref lh), &Value::Function(ref rh)) => ptr::eq::<Callable>(lh.borrow(), rh.borrow()),
+            (Value::String(lh), Value::String(rh)) => lh == rh,
+            (Value::Number(lh), Value::Number(rh)) => lh == rh,
+            (Value::Boolean(lh), Value::Boolean(rh)) => lh == rh,
+            (Value::Nil, Value::Nil) => true,
+            (Value::Function(lh), Value::Function(rh)) => ptr::eq::<Callable>(lh.borrow(), rh.borrow()),
             _ => false,
         }
     }
@@ -115,7 +115,7 @@ impl PartialEq<Value> for Value {
 
 impl Value {
     pub fn type_name(&self) -> &'static str {
-        match *self {
+        match self {
             Value::String(_) => "string",
             Value::Number(_) => "number",
             Value::Boolean(_) => "boolean",
@@ -127,12 +127,12 @@ impl Value {
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Value::String(ref s) => write!(f, "{}", s),
-            Value::Number(ref num) => write!(f, "{}", num),
-            Value::Boolean(ref b) => write!(f, "{}", b),
+        match self {
+            Value::String(s) => write!(f, "{}", s),
+            Value::Number(num) => write!(f, "{}", num),
+            Value::Boolean(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
-            Value::Function(ref func) => write!(f, "<fn {}>", func.name())
+            Value::Function(func) => write!(f, "<fn {}>", func.name())
             // Value::Object() => write!(f, "object"),
         }
     }
@@ -143,21 +143,21 @@ pub mod printer {
     use super::Expr::*;
 
     pub fn print_ast(expr: &Expr) -> String {
-        match *expr {
-            Binary { ref lh, ref op, ref rh } => parenthesize(&format!("{}", op), &[lh, rh]),
-            Literal(ref value) => match *value {
+        match expr {
+            Binary { lh, op, rh } => parenthesize(&format!("{}", op), &[lh, rh]),
+            Literal(value) => match value {
                 Value::Nil => String::from("nil"),
                 Value::Number(num) => format!("{}", num),
-                Value::String(ref s) => (**s).to_owned(),
+                Value::String(s) => (**s).to_owned(),
                 Value::Boolean(b) => format!("{}", b),
-                Value::Function(ref func) => format!("func {}", func.name()),
-                // ref obj @ Value::Object() => format!("{:?}", obj),
+                Value::Function(func) => format!("func {}", func.name()),
+                // obj @ Value::Object() => format!("{:?}", obj),
             },
-            Unary { ref op, ref rh } => parenthesize(&format!("{}", op), &[rh]),
-            Variable(ref s) => format!("var {}", s),
-            Assign { ref name, ref value } => format!("assignment {} = {}", name, print_ast(value)),
-            Logic { ref lh, ref op, ref rh } => parenthesize(&format!("{}", op), &[lh, rh]),
-            Call { ref callee, ref args } => format!("call {}({})",
+            Unary { op, rh } => parenthesize(&format!("{}", op), &[rh]),
+            Variable(s) => format!("var {}", s),
+            Assign { name, value } => format!("assignment {} = {}", name, print_ast(value)),
+            Logic { lh, op, rh } => parenthesize(&format!("{}", op), &[lh, rh]),
+            Call { callee, args } => format!("call {}({})",
                                                      print_ast(callee),
                                                      args.iter().map(|it| print_ast(it))
                                                          .collect::<Vec<_>>()

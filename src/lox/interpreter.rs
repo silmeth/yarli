@@ -52,17 +52,17 @@ impl Interpreter {
     }
 
     fn evaluate(&mut self, expr: &Expr) -> EvaluateResult {
-        let res = match *expr {
-            Literal(ref value) => value.clone(),
-            Unary { ref op, ref rh } => match *op {
+        let res = match expr {
+            Literal(value) => value.clone(),
+            Unary { op, rh } => match op {
                 UnOperator::Not => Value::Boolean(!is_truthy(&self.evaluate(&*rh)?)),
                 UnOperator::Minus => Value::Number(-expect_number(&self.evaluate(&*rh)?)?),
             },
-            Binary { ref lh, ref op, ref rh } => {
+            Binary { lh, op, rh } => {
                 let lh = self.evaluate(&*lh)?;
                 let rh = self.evaluate(&*rh)?;
 
-                match *op {
+                match op {
                     BiOperator::Minus => Value::Number(expect_number(&lh)? - expect_number(&rh)?),
                     BiOperator::Div => Value::Number(expect_number(&lh)? / expect_number(&rh)?),
                     BiOperator::Mul => Value::Number(expect_number(&lh)? * expect_number(&rh)?),
@@ -81,24 +81,24 @@ impl Interpreter {
                     BiOperator::NotEq => Value::Boolean(lh != rh),
                 }
             }
-            Variable(ref s) => {
+            Variable(s) => {
                 self.environment.borrow().get(s)?
             }
-            Assign { ref name, ref value } => {
+            Assign { name, value } => {
                 let value = self.evaluate(&*value)?;
                 self.environment.borrow_mut().assign(Rc::clone(name), value.clone())?;
                 value
             }
-            Logic { ref lh, ref op, ref rh } => {
+            Logic { lh, op, rh } => {
                 let lh = self.evaluate(&*lh)?;
 
-                match *op {
+                match op {
                     LogicOperator::Or if is_truthy(&lh) => lh,
                     LogicOperator::And if !is_truthy(&lh) => lh,
                     _ => self.evaluate(&*rh)?,
                 }
             },
-            Call { ref callee, ref args } => {
+            Call { callee, args } => {
                 let callee = self.evaluate(callee)?;
                 let args = args.iter().map(|arg| self.evaluate(arg)).collect::<Result<Vec<_>, _>>()?;
 
@@ -121,31 +121,31 @@ impl Interpreter {
     }
 
     fn interpret_stmt(&mut self, stmt: &Stmt) -> InterpretResult {
-        match *stmt {
-            Stmt::Expression(ref expr) => { self.evaluate(expr)?; }
-            Stmt::Print(ref expr) => println!("{}", self.evaluate(expr)?),
-            Stmt::Var { ref name, ref initializer } => {
+        match stmt {
+            Stmt::Expression(expr) => { self.evaluate(expr)?; }
+            Stmt::Print(expr) => println!("{}", self.evaluate(expr)?),
+            Stmt::Var { name, initializer } => {
                 let value = self.evaluate(initializer)?;
                 self.environment.borrow_mut().define(name.to_owned(), value);
             }
-            Stmt::Block(ref stmts) => {
+            Stmt::Block(stmts) => {
                 let local = Environment::new_local(Rc::clone(&self.environment)).into_cell();
                 self.execute_block(stmts, local)?
             }
-            Stmt::If { ref condition, ref then_branch, ref else_branch } => {
+            Stmt::If { condition, then_branch, else_branch } => {
                 if is_truthy(&self.evaluate(condition)?) {
                     self.interpret_stmt(&*then_branch)?;
-                } else if let Some(ref else_branch) = *else_branch {
+                } else if let Some(else_branch) = else_branch {
                     self.interpret_stmt(&*else_branch)?;
                 }
             }
-            Stmt::Return(ref expr) => return Err(EarlyExit::Return(self.evaluate(expr)?)),
-            Stmt::While { ref condition, ref body } => {
+            Stmt::Return(expr) => return Err(EarlyExit::Return(self.evaluate(expr)?)),
+            Stmt::While { condition, body } => {
                 while is_truthy(&self.evaluate(condition)?) {
                     self.interpret_stmt(&*body)?;
                 }
             }
-            Stmt::Function { ref name, ref parameters, ref body } => {
+            Stmt::Function { name, parameters, body } => {
                 let function = Value::Function(Rc::new(LoxFunction {
                     name: Rc::clone(name),
                     parameters: parameters.clone(),
@@ -208,8 +208,8 @@ impl Environment {
             let _ = self.values.insert(name, value);
             Ok(())
         } else {
-            match self.enclosing {
-                Some(ref mut enclosing) => {
+            match &self.enclosing {
+                Some(enclosing) => {
                     enclosing.borrow_mut().assign(name, value)?;
                     Ok(())
                 }
@@ -221,8 +221,8 @@ impl Environment {
     fn get(&self, name: &str) -> EvaluateResult {
         match self.values.get(name) {
             Some(val) => Ok(val.clone()),
-            None => match self.enclosing {
-                Some(ref enclosing) => Ok(enclosing.borrow().get(name)?),
+            None => match &self.enclosing {
+                Some(enclosing) => Ok(enclosing.borrow().get(name)?),
                 None => Err(RuntimeError::UndefinedError { name: name.to_owned() })
             },
         }
@@ -235,7 +235,7 @@ impl Environment {
 
 #[inline]
 fn is_truthy(val: &Value) -> bool {
-    match *val {
+    match val {
         Value::Boolean(false) | Value::Nil => false,
         _ => true
     }
@@ -243,8 +243,8 @@ fn is_truthy(val: &Value) -> bool {
 
 #[inline]
 fn expect_number(val: &Value) -> Result<f64, RuntimeError> {
-    match *val {
-        Value::Number(num) => Ok(num),
+    match val {
+        Value::Number(num) => Ok(*num),
         _ => Err(RuntimeError::type_error("number", val)),
     }
 }
